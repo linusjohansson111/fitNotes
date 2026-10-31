@@ -11,6 +11,7 @@ private GitHub repo. See [SPEC.md](SPEC.md) for what it does and why, and
 npm ci
 npm run dev     # local server, also reachable from a phone on the same network
 npm run check   # types, tests and production build
+npm run e2e     # the "Done when" walkthrough in Chrome, against an in-memory GitHub
 ```
 
 Offline behaviour needs the production build, because the service worker only runs there:
@@ -39,6 +40,12 @@ tokens. Limit it to the `fitnotes-data` repo and give it Contents read and write
 
 **4. Install.** Open the site in Safari, then Share → Add to Home Screen. Open the app from
 the Home Screen, go to Settings, paste the token, and set your bodyweight.
+
+## Muscle map
+
+A lift is only compared against your other lifts, so one counted lift always shows yellow,
+and the map needs at least two before colours differ. Tap a muscle to see its numbers.
+Only the lifts in `src/balance/standards.ts` count, and that table is yours to edit.
 
 ## Backup and restore
 

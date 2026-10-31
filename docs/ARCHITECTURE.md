@@ -47,6 +47,7 @@ addEntry, updateEntry, deleteEntry, setBodyweight, deleteBodyweight, saveCustomE
 
 // src/backup/index.ts
 startBackup(): void
+stopBackup(): void
 connectBackup(token: string): Promise<void>
 useBackupStatus(): BackupStatus
 ```
