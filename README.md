@@ -5,6 +5,8 @@ target reps next time. It is a Home Screen web app that works offline and backs 
 private GitHub repo. See [SPEC.md](SPEC.md) for what it does and why, and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is built.
 
+The app is live at <https://linusjohansson111.github.io/fitNotes/>.
+
 ## Develop
 
 ```sh
