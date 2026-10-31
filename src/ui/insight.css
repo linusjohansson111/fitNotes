@@ -1,0 +1,313 @@
+/* Body map */
+.ins-body {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.ins-body .rbh-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
+  aspect-ratio: 1 / 2;
+}
+.ins-body .rbh {
+  display: block;
+}
+/* A transparent stroke closes the gaps between muscles and widens small ones for a finger. */
+.ins-body--tap polygon {
+  stroke: transparent;
+  stroke-width: 5;
+}
+/* The library's two soleus polygons run past its viewBox, so they are cut into stubs. */
+.ins-body .rbh-wrapper:last-child polygon:nth-last-child(-n + 2) {
+  display: none;
+}
+
+/* Strength graph */
+.ins-red {
+  --ins-colour: var(--red);
+}
+.ins-yellow {
+  --ins-colour: var(--yellow);
+}
+.ins-green {
+  --ins-colour: var(--green);
+}
+.ins-graph svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ins-guide {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.ins-axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.ins-line {
+  fill: none;
+  stroke: var(--ins-colour);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+}
+.ins-line.ins-lead {
+  stroke-width: 2;
+  opacity: 1;
+}
+.ins-dot {
+  fill: var(--ins-colour);
+  opacity: 0.6;
+}
+.ins-dot.ins-lead {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  opacity: 1;
+}
+.ins-ranges {
+  display: flex;
+}
+.ins-range {
+  flex: 1;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  touch-action: manipulation;
+}
+.ins-range[aria-pressed='true'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Screens */
+.ins-screen {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 16px 32px;
+}
+.ins-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.ins-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.ins-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* Exercise */
+.ins-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  margin-left: -16px;
+}
+.ins-back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+}
+.ins-weights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.ins-weight {
+  color: var(--ins-colour);
+  opacity: 0.68;
+}
+.ins-weight--now {
+  opacity: 1;
+}
+.ins-weight-kg {
+  display: block;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.ins-weight-reps {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.ins-log {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  margin: 16px 0 20px;
+  background: var(--ins-colour);
+  color: #000;
+  font-size: 19px;
+  font-weight: 600;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.ins-last {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+.ins-note {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  margin-top: 16px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.35;
+  resize: none;
+  field-sizing: content;
+}
+.ins-note::placeholder {
+  color: var(--muted);
+}
+.ins-history {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ins-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 16px;
+  text-decoration: none;
+}
+.ins-entry-date {
+  flex: 1;
+  color: var(--muted);
+}
+.ins-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ins-colour);
+}
+
+/* Map */
+.ins-map-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.ins-map-figure {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+.ins-legend {
+  margin: 12px 0 0;
+}
+.ins-legend-bar {
+  height: 6px;
+  background: linear-gradient(to right, var(--red), var(--yellow), var(--green));
+}
+.ins-legend-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ins-detail {
+  margin-top: 20px;
+}
+.ins-detail-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.ins-detail-level {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+.ins-detail-average {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+.ins-lifts {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ins-lift {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 16px;
+}
+.ins-bodyweight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  font-size: 16px;
+}
+.ins-bodyweight-input {
+  box-sizing: border-box;
+  width: 84px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  outline: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+.ins-bodyweight-save {
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  padding: 0 4px 0 12px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  touch-action: manipulation;
+}
