@@ -38,6 +38,14 @@ async function advance(ms: number): Promise<void> {
   await settle();
 }
 
+/** Like `advance`, but lets async work run at each step, so timers re-arm when they really would. */
+async function step(ms: number, each = 5_000): Promise<void> {
+  for (let elapsed = 0; elapsed < ms; elapsed += each) {
+    await vi.advanceTimersByTimeAsync(each);
+    await settle(50);
+  }
+}
+
 /** The app closed and opened again: same device, new module state. */
 async function reopenApp(): Promise<App> {
   app?.backup.stopBackup();
@@ -278,6 +286,19 @@ describe('AC2: restore on a fresh install', () => {
     expect(app.store.isDirty()).toBe(false);
     expect(gh.puts).toEqual([]);
     expect(gh.text).toBe(remoteBefore);
+  });
+
+  it('never marks the store dirty while restoring', async () => {
+    await populate();
+    await connect();
+    app = await freshInstall();
+    const dirtyDuringRestore: boolean[] = [];
+    app.store.subscribe(() => dirtyDuringRestore.push(app.store.isDirty()));
+
+    await app.backup.connectBackup(gh.token);
+
+    expect(dirtyDuringRestore.length).toBeGreaterThan(0);
+    expect(dirtyDuringRestore).not.toContain(true);
   });
 
   it('shows restored records through useAppData with no extra step', async () => {
@@ -868,13 +889,7 @@ describe('retry timer', () => {
       times.push(Date.now() - start);
     };
 
-    await advance(15_000);
-    await advance(30_000);
-    await advance(60_000);
-    await advance(120_000);
-    await advance(240_000);
-    await advance(300_000);
-    await advance(300_000);
+    await step(1_065_000);
 
     expect(times).toEqual([15_000, 45_000, 105_000, 225_000, 465_000, 765_000, 1_065_000]);
   });
@@ -903,6 +918,34 @@ describe('retry timer', () => {
     app.backup.startBackup();
     await settle();
     gh.offline = true;
+    window.dispatchEvent(new Event('online'));
+    await settle();
+    gh.calls = [];
+
+    await advance(WEEK_MS);
+    expect(gh.calls).toEqual([]);
+  });
+
+  it('starts the backoff again after a success', async () => {
+    await failedPush();
+    await step(15_000);
+
+    gh.offline = false;
+    window.dispatchEvent(new Event('online'));
+    await settle();
+    expect(app.store.isDirty()).toBe(false);
+
+    gh.offline = true;
+    await app.store.addEntry(set('2026-10-02'));
+    await advance(3_000);
+    gh.calls = [];
+    await step(15_000);
+    expect(gh.calls.length).toBeGreaterThan(0);
+  });
+
+  it('drops a pending retry when another trigger succeeds', async () => {
+    await failedPush();
+    gh.offline = false;
     window.dispatchEvent(new Event('online'));
     await settle();
     gh.calls = [];

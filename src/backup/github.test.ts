@@ -159,6 +159,13 @@ describe('read', () => {
   });
 });
 
+describe('newer backups', () => {
+  it('says the app needs updating', async () => {
+    gh.commit(JSON.stringify({ ...emptySnapshot(), version: 2 }));
+    await expect(target.read()).rejects.toThrow('newer app version');
+  });
+});
+
 describe('write', () => {
   it('creates the file without a sha, then needs the current one', async () => {
     await target.write(emptySnapshot(), null);

@@ -37,7 +37,6 @@ let dirty = false;
 let revision = 0;
 let lastStamp = 0;
 let loading: Promise<void> | null = null;
-let persistenceRequested = false;
 let queue: Promise<unknown> = Promise.resolve();
 
 const listeners = new Set<() => void>();
@@ -91,12 +90,10 @@ function absorb(names: Collection[], changes: Changes): void {
 }
 
 async function requestPersistence(): Promise<void> {
-  if (persistenceRequested) return;
-  persistenceRequested = true;
   try {
-    await navigator.storage?.persist?.();
+    await navigator.storage.persist();
   } catch {
-    // Best effort: the backup protects the data either way.
+    // Absent in some browsers. Best effort: the backup protects the data either way.
   }
 }
 

@@ -354,6 +354,19 @@ describe('iOS traps', () => {
     expect(store.getAppData()?.bodyweights).toHaveLength(2);
   });
 
+  it('keeps its retry for a failed reopen when the browser reports the close', async () => {
+    const connection = captureConnection();
+    await store.setBodyweight('2026-10-01', 80);
+
+    forceCloseDatabase(connection() as unknown as typeof IDBDatabase);
+    vi.mocked(indexedDB.open).mockImplementationOnce(() => {
+      throw new DOMException('Connection lost', 'UnknownError');
+    });
+
+    await store.setBodyweight('2026-10-02', 81);
+    expect(store.getAppData()?.bodyweights).toHaveLength(2);
+  });
+
   it('rejects and leaves memory unchanged when the retry also fails', async () => {
     await store.setBodyweight('2026-10-01', 80);
     const before = store.getAppData();

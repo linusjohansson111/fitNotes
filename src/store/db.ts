@@ -24,6 +24,7 @@ function connect(): Promise<IDBPDatabase> {
       }
       db.createObjectStore('meta');
     },
+    // Without this, the next transaction spends its one retry on a dead connection.
     terminated() {
       if (connection === opening) connection = null;
     },
