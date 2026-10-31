@@ -172,6 +172,30 @@ describe('sameRecords', () => {
     ).toBe(true);
   });
 
+  it.each<[string, Partial<Snapshot>]>([
+    ['an entry', { entries: [entry()] }],
+    ['a bodyweight', { bodyweights: [{ date: '2026-10-01', kg: 80, updatedAt: 1 }] }],
+    ['a note', { notes: [{ exerciseId: 'bench', note: 'Elbows in', updatedAt: 1 }] }],
+    [
+      'a custom exercise',
+      {
+        customExercises: [
+          {
+            id: 'c',
+            name: 'Curl',
+            group: 'Arms',
+            primaryMuscles: ['biceps'],
+            secondaryMuscles: [],
+            equipment: 'cable',
+            updatedAt: 1,
+          },
+        ],
+      },
+    ],
+  ])('notices when only one side has %s', (_name, extra) => {
+    expect(sameRecords(snapshot(), snapshot(extra))).toBe(false);
+  });
+
   it('notices an added record, a changed value and a new tombstone', () => {
     const base = snapshot({ entries: [entry()] });
     expect(sameRecords(base, snapshot({ entries: [entry(), entry({ id: 'b' })] }))).toBe(false);

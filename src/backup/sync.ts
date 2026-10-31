@@ -86,7 +86,7 @@ function scheduleRetry(): void {
 }
 
 function isPermanent(error: BackupError): boolean {
-  return error.kind === 'auth' || error.kind === 'repo-not-found' || error.kind === 'bad-backup';
+  return ['auth', 'repo-not-found', 'repo-public', 'bad-backup'].includes(error.kind);
 }
 
 async function runPass(): Promise<void> {
@@ -105,7 +105,7 @@ async function runPass(): Promise<void> {
     failures = 0;
     clearTimeout(retryTimer);
     retryTimer = undefined;
-    setStatus({ state: 'idle', lastBackupAt: backedUpAt, error: null });
+    setStatus({ state: 'idle', lastBackupAt: backedUpAt });
   } catch (cause) {
     const error =
       cause instanceof BackupError ? cause : new BackupError('unknown', 'Backup failed. It will try again.');

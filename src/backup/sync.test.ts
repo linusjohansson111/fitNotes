@@ -580,6 +580,31 @@ describe('errors and the token', () => {
     expect(gh.snapshot.entries).toHaveLength(1);
   });
 
+  it('is not rejected by a failing pass that still used the old token', async () => {
+    await connected();
+    app.backup.startBackup();
+    await settle();
+    const rotated = 'github_pat_rotated';
+    gh.token = rotated;
+
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    gh.before = async (call) => {
+      if (call.headers.authorization !== `Bearer ${rotated}`) await gate;
+    };
+
+    window.dispatchEvent(new Event('online'));
+    await settle();
+    const connecting = app.backup.connectBackup(rotated);
+    await settle();
+    release();
+
+    await expect(connecting).resolves.toBeUndefined();
+    expect(await app.store.getMeta('credentials')).toEqual({ token: rotated, owner: 'linus' });
+  });
+
   it.each([
     ['repo not found', { status: 404 }, 'fitnotes-data'],
     ['no access', { status: 403 }, 'Contents read and write'],
@@ -670,6 +695,167 @@ describe('errors and the token', () => {
     expect(JSON.stringify(await app.store.readAll())).not.toContain(original);
     expect(JSON.stringify(status(hook))).not.toContain(original);
     expect(JSON.stringify(logged.mock.calls)).not.toContain(original);
+  });
+});
+
+describe('repo privacy', () => {
+  const repoChecks = () => gh.calls.filter((call) => call.path === '/repos/linus/fitnotes-data');
+
+  /** A device connected to a private repo in an earlier session, then reopened. */
+  async function nextSession(): Promise<void> {
+    await app.store.setNote('bench', 'First backup');
+    await connected();
+    app = await reopenApp();
+  }
+
+  it('rejects a public repo at connect, storing and restoring nothing', async () => {
+    await app.store.addEntry(set('2026-10-01'));
+    await connect();
+    app = await freshInstall();
+    gh.repoPrivate = false;
+    gh.calls = [];
+    const hook = statusHook();
+
+    await expect(app.backup.connectBackup(gh.token)).rejects.toMatchObject({
+      name: 'BackupError',
+      kind: 'repo-public',
+    });
+
+    expect(await app.store.getMeta('credentials')).toBeUndefined();
+    expect(status(hook).connected).toBe(false);
+    expect(app.store.isEmpty()).toBe(true);
+    expect(gh.calls.filter((call) => call.path.endsWith('/backup.json'))).toEqual([]);
+    expect(gh.puts).toEqual([]);
+  });
+
+  it('rejects a repo whose reply has no private field', async () => {
+    gh.repoPrivate = undefined;
+    await expect(app.backup.connectBackup(gh.token)).rejects.toMatchObject({ kind: 'repo-public' });
+    expect(await app.store.getMeta('credentials')).toBeUndefined();
+  });
+
+  it('sends no PUT to a repo made public between sessions, and reports it', async () => {
+    await nextSession();
+    gh.repoPrivate = false;
+    app.backup.startBackup();
+    await settle();
+    const hook = statusHook();
+    gh.calls = [];
+
+    await act(async () => {
+      await app.store.addEntry(set('2026-10-01'));
+      await advance(3_000);
+    });
+
+    expect(gh.puts).toEqual([]);
+    expect(status(hook)).toMatchObject({ connected: true, state: 'error' });
+    expect(status(hook).error).toContain('not private');
+    expect(app.store.isDirty()).toBe(true);
+    expect(app.store.getAppData()?.entries).toHaveLength(1);
+  });
+
+  it('holds back data left dirty by the last session', async () => {
+    await nextSession();
+    await app.store.addEntry(set('2026-10-01'));
+    app = await reopenApp();
+    gh.repoPrivate = false;
+    gh.calls = [];
+
+    app.backup.startBackup();
+    await settle();
+
+    expect(repoChecks()).toHaveLength(1);
+    expect(gh.puts).toEqual([]);
+    expect(app.store.isDirty()).toBe(true);
+  });
+
+  it('does not loop', async () => {
+    await nextSession();
+    gh.repoPrivate = false;
+    app.backup.startBackup();
+    await settle();
+    await app.store.addEntry(set('2026-10-01'));
+    await advance(3_000);
+    gh.calls = [];
+
+    await advance(WEEK_MS);
+    expect(gh.calls).toEqual([]);
+  });
+
+  it('resumes on the next trigger once the repo is private again', async () => {
+    await nextSession();
+    gh.repoPrivate = false;
+    app.backup.startBackup();
+    await settle();
+    const hook = statusHook();
+    await act(async () => {
+      await app.store.addEntry(set('2026-10-01'));
+      await advance(3_000);
+    });
+    expect(status(hook).state).toBe('error');
+
+    gh.repoPrivate = true;
+    await act(async () => {
+      setVisibility('visible');
+      await settle();
+    });
+
+    expect(gh.puts).toHaveLength(1);
+    expect(gh.snapshot.entries).toHaveLength(1);
+    expect(status(hook)).toMatchObject({ state: 'idle', error: null });
+  });
+
+  it('adds one check per session, however many syncs run', async () => {
+    await nextSession();
+    app.backup.startBackup();
+    await settle();
+    gh.calls = [];
+
+    for (const date of ['2026-10-01', '2026-10-02', '2026-10-03']) {
+      await app.store.addEntry(set(date));
+      await advance(5_000);
+    }
+
+    expect(gh.puts).toHaveLength(3);
+    expect(repoChecks()).toHaveLength(1);
+  });
+
+  it('adds no check when nothing needs pushing', async () => {
+    await nextSession();
+    app.backup.startBackup();
+    await settle();
+    expect(repoChecks()).toEqual([]);
+  });
+
+  it('adds no check in the session that connected, which already verified the repo', async () => {
+    await app.store.setNote('bench', 'First backup');
+    await connected();
+    app.backup.startBackup();
+    await settle();
+    gh.calls = [];
+
+    await app.store.addEntry(set('2026-10-01'));
+    await advance(5_000);
+
+    expect(gh.puts).toHaveLength(1);
+    expect(repoChecks()).toEqual([]);
+  });
+
+  it('checks again in each new session', async () => {
+    await nextSession();
+    app.backup.startBackup();
+    await settle();
+    await app.store.addEntry(set('2026-10-01'));
+    await advance(5_000);
+
+    app = await reopenApp();
+    app.backup.startBackup();
+    await settle();
+    gh.calls = [];
+    await app.store.addEntry(set('2026-10-02'));
+    await advance(5_000);
+
+    expect(repoChecks()).toHaveLength(1);
   });
 });
 
@@ -808,6 +994,34 @@ describe('triggers', () => {
     await advance(10_000);
     expect(gh.puts).toHaveLength(2);
     expect(gh.snapshot.entries.map((entry) => entry.id).sort()).toEqual([first.id, late.id].sort());
+    expect(app.store.isDirty()).toBe(false);
+  });
+
+  it('runs a second pass when the debounce fires while a slow sync is still running', async () => {
+    await connected();
+    app.backup.startBackup();
+    await settle();
+
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    gh.before = async (call) => {
+      if (call.method === 'PUT') await gate;
+    };
+
+    await app.store.addEntry(set('2026-10-01'));
+    await advance(3_000);
+    expect(gh.puts).toHaveLength(1);
+
+    const late = await app.store.addEntry(set('2026-10-02'));
+    await advance(3_000);
+    gh.before = undefined;
+    release();
+    await settle();
+
+    expect(gh.puts).toHaveLength(2);
+    expect(gh.snapshot.entries.map((entry) => entry.id)).toContain(late.id);
     expect(app.store.isDirty()).toBe(false);
   });
 
@@ -1032,6 +1246,26 @@ describe('useBackupStatus', () => {
       lastBackupAt: Date.now(),
       error: null,
     });
+  });
+
+  it('keeps the same object when a sync changes nothing', async () => {
+    await connected();
+    app.backup.startBackup();
+    await settle();
+    const hook = statusHook();
+    goOffline();
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      await settle();
+    });
+    const offline = hook.result.current;
+    expect(offline.state).toBe('offline');
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+      await settle();
+    });
+    expect(hook.result.current).toBe(offline);
   });
 
   it('is stable between changes', async () => {

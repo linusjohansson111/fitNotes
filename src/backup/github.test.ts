@@ -217,6 +217,87 @@ describe('errors', () => {
   });
 });
 
+describe('repo privacy', () => {
+  /** github.ts remembers confirmed owners per session, so each test needs an owner of its own. */
+  function freshOwner(name: string): GithubTarget {
+    gh.login = name;
+    return new GithubTarget(gh.token, name);
+  }
+
+  it.each<[string, boolean | undefined]>([
+    ['public', false],
+    ['missing the private field', undefined],
+  ])('refuses a repo that is %s', async (_name, repoPrivate) => {
+    gh.repoPrivate = repoPrivate;
+    expect(await kindOf(GithubTarget.connect(gh.token))).toBe('repo-public');
+  });
+
+  it('counts an unreadable repo reply as not private', async () => {
+    const target = freshOwner('garbled');
+    gh.failNext({ status: 200, body: 'not json' });
+    expect(await kindOf(target.verifyRepo())).toBe('repo-public');
+  });
+
+  it('counts a repo reply of null as not private', async () => {
+    const target = freshOwner('null-reply');
+    gh.failNext({ status: 200, body: 'null' });
+    expect(await kindOf(target.verifyRepo())).toBe('repo-public');
+  });
+
+  it('tells the user what to do', async () => {
+    gh.repoPrivate = false;
+    await expect(GithubTarget.connect(gh.token)).rejects.toThrow('Make it private');
+  });
+
+  it('refuses the first write to a public repo, sending no PUT', async () => {
+    const target = freshOwner('public-owner');
+    gh.repoPrivate = false;
+    expect(await kindOf(target.write(withCustom, null))).toBe('repo-public');
+    expect(gh.puts).toEqual([]);
+    expect(gh.text).toBeNull();
+  });
+
+  it('refuses to read a backup-less public repo as simply empty', async () => {
+    const target = freshOwner('empty-public');
+    gh.repoPrivate = false;
+    expect(await kindOf(target.read())).toBe('repo-public');
+  });
+
+  it('checks a private repo once, on the first write', async () => {
+    const target = freshOwner('private-owner');
+    await target.write(emptySnapshot(), null);
+    const first = await target.read();
+    await target.write(withCustom, first?.sha ?? null);
+
+    expect(gh.calls.filter((call) => call.path === `/repos/private-owner/fitnotes-data`)).toHaveLength(1);
+    expect(gh.puts).toHaveLength(2);
+  });
+
+  it('checks again after a refusal, so a repo made private can resume', async () => {
+    const target = freshOwner('fixed-owner');
+    gh.repoPrivate = false;
+    expect(await kindOf(target.write(withCustom, null))).toBe('repo-public');
+
+    gh.repoPrivate = true;
+    await target.write(withCustom, null);
+    expect(gh.snapshot.customExercises).toEqual([custom]);
+  });
+
+  it('does not let one owner confirm another', async () => {
+    await freshOwner('confirmed-owner').verifyRepo();
+    const other = freshOwner('other-owner');
+    gh.repoPrivate = false;
+    expect(await kindOf(other.write(withCustom, null))).toBe('repo-public');
+  });
+
+  it('never reaches a PUT when the check cannot complete', async () => {
+    const target = freshOwner('unreachable-owner');
+    gh.offline = true;
+    expect(await kindOf(target.write(withCustom, null))).toBe('offline');
+    expect(gh.puts).toEqual([]);
+  });
+});
+
 describe('connect', () => {
   it('resolves the owner from the token', async () => {
     expect((await GithubTarget.connect(gh.token)).owner).toBe('linus');

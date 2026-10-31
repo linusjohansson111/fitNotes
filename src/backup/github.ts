@@ -11,9 +11,13 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // String.fromCharCode(...bytes) overflows the argument limit on a whole backup.
 const BASE64_CHUNK = 0x8000;
 
+// Owners whose repo was confirmed private this app session, so only the first push pays a request.
+const confirmedPrivate = new Set<string>();
+
 export type BackupErrorKind =
   | 'auth'
   | 'repo-not-found'
+  | 'repo-public'
   | 'offline'
   | 'rate-limit'
   | 'conflict'
@@ -115,6 +119,15 @@ async function call(
   }
 }
 
+/** Anything but an explicit `private: true` counts as public. */
+function isPrivate(repoBody: string): boolean {
+  try {
+    return (JSON.parse(repoBody) as { private?: unknown }).private === true;
+  } catch {
+    return false;
+  }
+}
+
 function parseSnapshot(text: string): Snapshot {
   let data: Partial<Snapshot>;
   try {
@@ -160,9 +173,17 @@ export class GithubTarget implements BackupTarget {
     return `/repos/${encodeURIComponent(this.owner)}/${REPO}`;
   }
 
+  /** Rejects unless the repo exists and is private: the backup holds training and body data. */
   async verifyRepo(): Promise<void> {
     const repo = await call(this.token, this.repoPath);
     if (!repo.ok) throw failure(repo);
+    if (!isPrivate(repo.body)) {
+      throw new BackupError(
+        'repo-public',
+        `The repo ${REPO} is not private, so nothing was backed up. Make it private on GitHub and try again.`,
+      );
+    }
+    confirmedPrivate.add(this.owner);
   }
 
   async read(): Promise<{ snapshot: Snapshot; sha: string } | null> {
@@ -190,6 +211,7 @@ export class GithubTarget implements BackupTarget {
   }
 
   async write(snapshot: Snapshot, sha: string | null): Promise<void> {
+    if (!confirmedPrivate.has(this.owner)) await this.verifyRepo();
     const reply = await call(this.token, `${this.repoPath}/contents/${FILE}`, {
       method: 'PUT',
       body: JSON.stringify({

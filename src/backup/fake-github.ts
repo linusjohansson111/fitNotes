@@ -29,6 +29,8 @@ export class FakeGithub {
   token = 'github_pat_fake_token';
   login = 'linus';
   repoExists = true;
+  /** undefined leaves the field out of the reply. */
+  repoPrivate: boolean | undefined = true;
   offline = false;
   calls: FakeCall[] = [];
   /** Runs before a request is answered: the place to interleave another device or a local write. */
@@ -88,7 +90,7 @@ export class FakeGithub {
   private route(call: FakeCall): Response {
     const repo = `/repos/${this.login}/fitnotes-data`;
     if (!call.path.startsWith(repo) || !this.repoExists) return reply(404, { message: 'Not Found' });
-    if (call.path === repo) return reply(200, { name: 'fitnotes-data', private: true });
+    if (call.path === repo) return reply(200, { name: 'fitnotes-data', private: this.repoPrivate });
     if (call.path.startsWith(`${repo}/git/blobs/`)) return this.getBlob(call);
     if (call.path === `${repo}/contents/backup.json`) {
       return call.method === 'PUT' ? this.putContents(call) : this.getContents();

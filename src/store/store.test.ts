@@ -270,7 +270,8 @@ describe('applySnapshot', () => {
   it('marks the store dirty on request and leaves an existing flag alone otherwise', async () => {
     await store.applySnapshot({ ...empty, entries: [entry] }, { dirty: true });
     expect(store.isDirty()).toBe(true);
-    await store.applySnapshot(empty, { dirty: false });
+    const newer = { ...entry, id: 'b', updatedAt: 200 };
+    await store.applySnapshot({ ...empty, entries: [newer] }, { dirty: false });
     expect(store.isDirty()).toBe(true);
   });
 
@@ -378,6 +379,25 @@ describe('iOS traps', () => {
     await expect(store.setBodyweight('2026-10-02', 81)).rejects.toBe(connectionLost);
     expect(store.getAppData()).toBe(before);
     expect(store.isDirty()).toBe(true);
+  });
+
+  it('loads on the next action after a failed load', async () => {
+    await store.setBodyweight('2026-10-01', 80);
+    store = await reopenApp();
+    const connectionLost = new DOMException('Connection lost', 'UnknownError');
+    vi.spyOn(indexedDB, 'open')
+      .mockImplementationOnce(() => {
+        throw connectionLost;
+      })
+      .mockImplementationOnce(() => {
+        throw connectionLost;
+      });
+
+    await expect(store.setBodyweight('2026-10-02', 81)).rejects.toBe(connectionLost);
+    expect(store.getAppData()).toBeNull();
+
+    await store.setBodyweight('2026-10-02', 81);
+    expect(store.getAppData()?.bodyweights).toHaveLength(2);
   });
 
   it('calls navigator.storage.persist once', async () => {
