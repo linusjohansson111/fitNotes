@@ -891,12 +891,11 @@ describe('retry timer', () => {
     await failedPush();
     setVisibility('hidden');
     await advance(WEEK_MS);
-    await settle();
-    const whileHidden = gh.calls.length;
-    expect(whileHidden).toBeLessThanOrEqual(1);
+    expect(gh.calls).toEqual([]);
 
-    await advance(WEEK_MS);
-    expect(gh.calls).toHaveLength(whileHidden);
+    setVisibility('visible');
+    await settle();
+    expect(gh.calls.length).toBeGreaterThan(0);
   });
 
   it('does not run when nothing is dirty', async () => {

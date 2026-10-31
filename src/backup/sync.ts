@@ -80,7 +80,8 @@ function scheduleRetry(): void {
   failures += 1;
   retryTimer = setTimeout(() => {
     retryTimer = undefined;
-    trigger();
+    // Becoming visible syncs anyway, so nothing is lost by skipping this one.
+    if (document.visibilityState === 'visible') trigger();
   }, delay);
 }
 
