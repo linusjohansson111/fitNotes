@@ -227,11 +227,12 @@ describe('entry updates', () => {
 
   it('lets only the stronger of two same-date entries feed the model', () => {
     const base = [set(0, 80, 8)];
-    const weak = set(4, 60, 8);
     const strong = set(4, 85, 8);
     const justStrong = predictRaw(barbell(...base, strong), on(4));
-    expect(predictRaw(barbell(...base, weak, strong), on(4))).toEqual(justStrong);
-    expect(predictRaw(barbell(...base, strong, weak), on(4))).toEqual(justStrong);
+    for (const updatedAt of [1, 9]) {
+      const weak = set(4, 60, 8, { updatedAt });
+      expect(predictRaw(barbell(...base, weak, strong), on(4))).toEqual(justStrong);
+    }
   });
 });
 
@@ -366,6 +367,13 @@ describe('rebound', () => {
     const decayed = raw(barbell(...trained), 112).yellow;
     const afterHit = raw(barbell(...trained, set(112, decayed, 8)), 112).yellow;
     expect(afterHit / decayed).toBeGreaterThan(1.02);
+  });
+
+  it('repays the debt faster on a beat', () => {
+    const debtAfter = (weight: number) =>
+      replay(barbell(...trained, set(112, weight, 8)), on(112)).state!.debt.yellow;
+    const decayed = raw(barbell(...trained), 112).yellow;
+    expect(debtAfter(decayed * 1.05)).toBeLessThan(debtAfter(decayed));
   });
 
   it('owes nothing for a shortfall', () => {

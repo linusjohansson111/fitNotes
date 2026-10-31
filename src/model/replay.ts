@@ -75,7 +75,6 @@ export interface State {
   debt: Prediction;
   missStreak: number;
   outcome: Outcome;
-  sessions: number;
   /** Days of training, with each gap capped so layoffs do not age you. */
   trainingAge: number;
   gaps: number[];
@@ -133,9 +132,11 @@ function typicalGap(gaps: number[]): number {
   return recent[Math.floor(recent.length / 2)];
 }
 
-/** Gain expected by the next session. Applied once at save: staying home earns nothing. */
+/**
+ * Gain expected by the next session. Applied once at save, never on a first session, so
+ * AC7 shows the curve alone and staying home earns nothing.
+ */
 function nextGain(state: State): number {
-  if (state.sessions < 2) return 0;
   const age = state.trainingAge;
   const gap = typicalGap(state.gaps);
   const span = Math.log(1 + (age + gap) / GROWTH_TAU_DAYS) - Math.log(1 + age / GROWTH_TAU_DAYS);
@@ -184,7 +185,6 @@ export function start(session: Session, equipment: Equipment): State {
     debt: perColour(() => 0),
     missStreak: 0,
     outcome: 'first',
-    sessions: 1,
     trainingAge: 0,
     gaps: [],
     trends: perColour(() => ({ n: 0, x: 0, y: 0, xx: 0, xy: 0 })),
@@ -198,9 +198,10 @@ export function start(session: Session, equipment: Equipment): State {
 }
 
 /**
- * Moves the loads away from `before`, keeping AC8 and the colour order. `own` keeps its
- * value exactly. Both limits are met together: the order never needs a colour to move
- * further than `own`, because the colours were in order before it moved.
+ * Limits the other colours' moves away from `before` (AC8), then lifts anything heavier
+ * than `own` that `own` has passed; `orderedLoads` does the same for anything lighter on
+ * every read. The order never needs a colour to move further than `own`, because the
+ * colours were in order before it moved, so the two rules cannot conflict.
  */
 function settleLoads(before: Prediction, after: Prediction, own: Colour): Prediction {
   const limit = OTHER_COLOUR_LIMIT * Math.abs(Math.log(after[own] / before[own]));
@@ -209,17 +210,13 @@ function settleLoads(before: Prediction, after: Prediction, own: Colour): Predic
     const move = Math.log(after[c] / before[c]);
     return before[c] * Math.exp(Math.min(limit, Math.max(-limit, move)));
   });
-  const position = COLOURS.indexOf(own);
-  for (let i = position - 1; i >= 0; i--) {
+  for (let i = COLOURS.indexOf(own) - 1; i >= 0; i--) {
     loads[COLOURS[i]] = Math.max(loads[COLOURS[i]], loads[COLOURS[i + 1]]);
-  }
-  for (let i = position + 1; i < COLOURS.length; i++) {
-    loads[COLOURS[i]] = Math.min(loads[COLOURS[i]], loads[COLOURS[i - 1]]);
   }
   return loads;
 }
 
-/** Folds one later session into `state`. Every field a caller keeps is replaced, not edited. */
+/** Folds one later session into `state`. */
 export function advance(state: State, session: Session): void {
   const own = session.colour;
   const days = daysBetween(state.date, session.date);
@@ -245,7 +242,6 @@ export function advance(state: State, session: Session): void {
 
   state.trainingAge += Math.min(days, GAP_CAP_DAYS);
   state.gaps.push(Math.min(days, GAP_CAP_DAYS));
-  state.sessions += 1;
 
   const carried = perColour((c) => (c === own ? ownShift : carryOver(state, own, c) * ownShift));
   const debt = perColour((c) => {

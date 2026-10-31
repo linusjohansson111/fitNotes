@@ -137,8 +137,92 @@ export function simulate(persona: Persona, seed: number, exact = false): Simulat
   return sessions;
 }
 
+/** Signed percentage error of each prediction, skipping the first session, which has none. */
 export function percentageErrors(sessions: SimulatedSession[]): number[] {
-  return sessions
-    .filter((session) => session.predicted !== null)
-    .map(({ predicted, actual }) => (100 * Math.abs((predicted as number) - actual)) / actual);
+  return sessions.flatMap(({ predicted, actual }) =>
+    predicted === null ? [] : [(100 * (predicted - actual)) / actual],
+  );
 }
+
+const rotation =
+  (...order: Colour[]) =>
+  (session: number) =>
+    order[session % order.length];
+
+const blocks =
+  (sessionsEach: number, ...order: Colour[]) =>
+  (session: number) =>
+    order[Math.floor(session / sessionsEach) % order.length];
+
+function mostlyYellow(_session: number, random: Random): Colour {
+  const roll = random();
+  if (roll < 0.7) return 'yellow';
+  return roll < 0.85 ? 'red' : 'green';
+}
+
+const LOW_REP_CURVE: Prediction = { red: 0.03, yellow: 0, green: -0.04 };
+const HIGH_REP_CURVE: Prediction = { red: -0.03, yellow: 0, green: 0.03 };
+
+export const PERSONAS: Persona[] = [
+  {
+    name: 'strong at low reps, rotates colours',
+    startStrength: 100,
+    growth: 0.08,
+    tau: 30,
+    curve: LOW_REP_CURVE,
+    noise: 0.015,
+    spillover: 0.7,
+    colourFor: rotation('yellow', 'red', 'green'),
+  },
+  {
+    name: 'strong at high reps, rotates colours',
+    startStrength: 70,
+    growth: 0.1,
+    tau: 40,
+    curve: HIGH_REP_CURVE,
+    noise: 0.012,
+    spillover: 0.7,
+    colourFor: rotation('green', 'yellow', 'red'),
+  },
+  {
+    name: 'mostly yellow, noisy days',
+    startStrength: 130,
+    growth: 0.05,
+    tau: 30,
+    curve: LOW_REP_CURVE,
+    noise: 0.02,
+    spillover: 0.6,
+    colourFor: mostlyYellow,
+  },
+  {
+    name: 'yellow only',
+    startStrength: 100,
+    growth: 0.08,
+    tau: 30,
+    curve: LOW_REP_CURVE,
+    noise: 0.015,
+    spillover: 0.7,
+    colourFor: () => 'yellow',
+  },
+  {
+    name: 'eight week layoff',
+    startStrength: 110,
+    growth: 0.07,
+    tau: 30,
+    curve: LOW_REP_CURVE,
+    noise: 0.015,
+    spillover: 0.7,
+    colourFor: rotation('yellow', 'red', 'green'),
+    layoff: { afterDay: 150, days: 56, loss: { red: 0.04, yellow: 0.06, green: 0.09 } },
+  },
+  {
+    name: 'switches colour every six weeks',
+    startStrength: 100,
+    growth: 0.08,
+    tau: 30,
+    curve: LOW_REP_CURVE,
+    noise: 0.015,
+    spillover: 0.6,
+    colourFor: blocks(12, 'yellow', 'red', 'green'),
+  },
+];
