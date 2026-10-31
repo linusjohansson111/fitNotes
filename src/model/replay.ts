@@ -100,7 +100,10 @@ function timeAway(colour: Colour, days: number): number {
   return amount * (1 - Math.exp(-((away / scale) ** shape)));
 }
 
-/** Loads at each colour's target reps. Decay can tip the order at very low loads, so it is reapplied. */
+/**
+ * Loads at each colour's target reps, always in order. Decay can tip the order at very
+ * low loads, and `settleLoads` relies on this to pull down colours lighter than the entry.
+ */
 function orderedLoads(strength: Prediction): Prediction {
   const red = weightFor(strength.red, TARGET_REPS.red);
   const yellow = Math.min(red, weightFor(strength.yellow, TARGET_REPS.yellow));

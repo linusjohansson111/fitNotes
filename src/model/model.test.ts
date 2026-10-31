@@ -300,7 +300,7 @@ describe('trap: growth on a miss', () => {
 });
 
 describe('growth', () => {
-  it('is zero after one session and floors at zero on a falling log', () => {
+  it('floors at zero on a falling log', () => {
     const falling = barbell(set(0, 100, 8), set(4, 95, 8), set(8, 90, 8), set(12, 85, 8), set(16, 80, 8));
     const before = raw(falling, 16).yellow;
     const afterHit = raw(barbell(...falling.entries, set(20, before, 8)), 20).yellow;
