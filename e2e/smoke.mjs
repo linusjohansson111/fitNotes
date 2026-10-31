@@ -265,8 +265,19 @@ async function run(browser) {
   check('AC2 restored rows match the phone', JSON.stringify(await homeRows(fresh.page)) === JSON.stringify(rows), JSON.stringify(await homeRows(fresh.page)));
   await shot(fresh.page, '7-restored');
   await fresh.page.locator('.row-history').first().click();
+  await fresh.page.locator('.ins-history li').first().waitFor();
   check('AC13 restored history is complete', (await fresh.page.locator('.ins-history li').count()) >= 1);
   await fresh.context.close();
+
+  // A deletion made on another device reaches this one on its next sync.
+  const cleared = gh.snapshot;
+  cleared.entries = cleared.entries.map((entry) => ({ ...entry, deleted: true, updatedAt: Date.now() }));
+  gh.file = { content: Buffer.from(JSON.stringify(cleared)).toString('base64'), sha: 'cleared' };
+  await page.reload();
+  await page.getByLabel('Add exercise').waitFor();
+  await page.getByLabel('Home', { exact: true }).first().click();
+  check('a deletion from elsewhere clears this device', await until(async () => (await homeRows(page)).length === 0, 10_000));
+  check('the bodyweight survives clearing entries', (await until(() => Promise.resolve(gh.snapshot.bodyweights.length === 1), 1_000)));
 
   // A repo made public stops receiving data, in the same session.
   const putsBeforePublic = gh.puts.length;

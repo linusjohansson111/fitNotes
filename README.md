@@ -19,29 +19,25 @@ npm run e2e     # the "Done when" walkthrough in Chrome, against an in-memory Gi
 Offline behaviour needs the production build, because the service worker only runs there:
 `npm run build && npm run preview`.
 
-## Set up on your iPhone
+## Install on your iPhone
 
-**1. Host the app.** iPhones only install web apps from HTTPS. Pushing to `main` deploys
-to GitHub Pages through `.github/workflows/deploy.yml`, which needs a public repo on a
-free GitHub plan. The app holds no secrets or personal data, so this is safe.
+1. Open <https://linusjohansson111.github.io/fitNotes/> in Safari. The address is
+   case-sensitive, so `fitnotes` in lower case gives a 404.
+2. Tap Share, then Add to Home Screen, and open the app from the Home Screen. Safari and
+   the Home Screen app keep separate data.
+3. Go to Settings, paste your GitHub token, and set your bodyweight. A new phone or a
+   reinstall restores every record as soon as the token is in.
 
-```sh
-gh repo create fitNotes --public --source . --push
-gh api -X POST repos/{owner}/fitNotes/pages -f build_type=workflow
-```
+**Creating a token.** On GitHub, go to Settings → Developer settings → Fine-grained tokens.
+Limit it to the `fitnotes-data` repo and give it Contents read and write access.
 
-**2. Create the private backup repo.** Backups go to `backup.json` in a repo that must be
-named `fitnotes-data`. The app refuses to back up to a repo that is not private.
+## Deploy
 
-```sh
-gh repo create fitnotes-data --private
-```
+Pushing `main` publishes the app to GitHub Pages through `.github/workflows/deploy.yml`.
+The phone picks up a new version the next time the app is opened online.
 
-**3. Create a token.** On GitHub, go to Settings → Developer settings → Fine-grained
-tokens. Limit it to the `fitnotes-data` repo and give it Contents read and write access.
-
-**4. Install.** Open the site in Safari, then Share → Add to Home Screen. Open the app from
-the Home Screen, go to Settings, paste the token, and set your bodyweight.
+Backups go to `backup.json` in the private `fitnotes-data` repo. The repo must keep that
+name, and the app refuses to back up to it if it is ever made public.
 
 ## Muscle map
 

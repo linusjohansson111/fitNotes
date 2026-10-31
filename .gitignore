@@ -4,5 +4,3 @@ dev-dist/
 coverage/
 *.local
 .DS_Store
-.worktrees/
-.claude/worktrees/
