@@ -256,16 +256,18 @@ export function advance(state: State, session: Session): void {
   for (const j of COLOURS) state.movedSince[j][own] += ownShift;
   state.loggedWeights.push(...session.loggedWeights);
 
-  // Growth is suppressed on a miss, or a small first miss could raise the prediction (AC10).
+  // Growth and rebound wait for the next good session: either could make a miss raise
+  // the prediction (AC10).
   const growth = miss ? 0 : nextGain(state);
+  const rebound = miss ? 0 : REBOUND_SHARE;
   const after = perColour((c) => {
-    const lift = carried[c] + REBOUND_SHARE * debt[c] + growth;
+    const lift = carried[c] + rebound * debt[c] + growth;
     return weightFor(e1rm(before[c], TARGET_REPS[c]) * Math.exp(lift), TARGET_REPS[c]);
   });
   const loads = settleLoads(before, after, own);
 
   state.date = session.date;
-  state.debt = perColour((c) => (1 - REBOUND_SHARE) * debt[c]);
+  state.debt = perColour((c) => (1 - rebound) * debt[c]);
   state.strength = perColour((c) => e1rm(loads[c], TARGET_REPS[c]));
 }
 

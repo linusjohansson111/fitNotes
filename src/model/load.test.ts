@@ -66,6 +66,11 @@ describe('loadableStep', () => {
     expect(loadableStep('dumbbell', [7.5, 12.5, 17.5])).toBe(5);
   });
 
+  it('needs 5 distinct weights before trusting a step above 5 kg', () => {
+    expect(loadableStep('barbell', [60, 80, 100])).toBe(2.5);
+    expect(loadableStep('machine', [30, 40, 50, 60, 70])).toBe(10);
+  });
+
   it('learns from negative weights', () => {
     expect(loadableStep('bodyweight', [-20, -15, -5])).toBe(5);
   });

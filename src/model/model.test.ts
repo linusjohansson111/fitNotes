@@ -86,6 +86,12 @@ describe('AC10: misses count less than beats', () => {
   const base = [set(0, 100, 8), set(3, 100, 8)];
   const percentMove = (before: number, after: number) => (100 * (after - before)) / before;
 
+  it.each([1.5, 3, 5, 8, 12])('a %f%% miss after a layoff still lowers the prediction', (x) => {
+    const start = raw(barbell(...base), 63).yellow;
+    const after = raw(barbell(...base, set(63, start * (1 - x / 100), 8)), 63).yellow;
+    expect(after).toBeLessThan(start);
+  });
+
   it.each([1.5, 3, 5, 8, 12])('at %f%%', (x) => {
     const start = raw(barbell(...base), 6).yellow;
     const beat = raw(barbell(...base, set(6, start * (1 + x / 100), 8)), 6).yellow;

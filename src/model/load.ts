@@ -44,7 +44,9 @@ function gcd(a: number, b: number): number {
 export function loadableStep(equipment: Equipment, loggedWeights: number[]): number {
   const quarters = [...new Set(loggedWeights.map((weight) => Math.round(weight * 4)))];
   if (quarters.length < 3) return DEFAULT_STEP_KG[equipment];
-  return quarters.reduce((step, quarter) => gcd(step, Math.abs(quarter - quarters[0])), 0) / 4;
+  const learned = quarters.reduce((step, quarter) => gcd(step, Math.abs(quarter - quarters[0])), 0) / 4;
+  // Sparse jumps like 60/80/100 say little, so a coarse step needs more weights behind it.
+  return learned > 5 && quarters.length < 5 ? DEFAULT_STEP_KG[equipment] : learned;
 }
 
 /**
