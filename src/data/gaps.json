@@ -1,0 +1,106 @@
+[
+  {
+    "id": "gap_overhead_press",
+    "name": "Overhead Press",
+    "group": "Shoulders",
+    "primaryMuscles": ["front-deltoids"],
+    "secondaryMuscles": ["triceps", "trapezius"],
+    "equipment": "barbell"
+  },
+  {
+    "id": "gap_bulgarian_split_squat",
+    "name": "Bulgarian Split Squat",
+    "group": "Legs",
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["gluteal", "hamstring"],
+    "equipment": "dumbbell"
+  },
+  {
+    "id": "gap_pec_deck",
+    "name": "Pec Deck",
+    "group": "Chest",
+    "primaryMuscles": ["chest"],
+    "secondaryMuscles": ["front-deltoids"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_assisted_pull_up_machine",
+    "name": "Assisted Pull-Up Machine",
+    "group": "Back",
+    "primaryMuscles": ["upper-back"],
+    "secondaryMuscles": ["biceps", "forearm"],
+    "equipment": "bodyweight"
+  },
+  {
+    "id": "gap_assisted_dip_machine",
+    "name": "Assisted Dip Machine",
+    "group": "Arms",
+    "primaryMuscles": ["triceps"],
+    "secondaryMuscles": ["chest", "front-deltoids"],
+    "equipment": "bodyweight"
+  },
+  {
+    "id": "gap_machine_lateral_raise",
+    "name": "Machine Lateral Raise",
+    "group": "Shoulders",
+    "primaryMuscles": ["front-deltoids", "back-deltoids"],
+    "secondaryMuscles": ["trapezius"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_pendlay_row",
+    "name": "Pendlay Row",
+    "group": "Back",
+    "primaryMuscles": ["upper-back"],
+    "secondaryMuscles": ["biceps", "back-deltoids", "lower-back"],
+    "equipment": "barbell"
+  },
+  {
+    "id": "gap_landmine_press",
+    "name": "Landmine Press",
+    "group": "Shoulders",
+    "primaryMuscles": ["front-deltoids"],
+    "secondaryMuscles": ["triceps", "chest"],
+    "equipment": "barbell"
+  },
+  {
+    "id": "gap_smith_machine_hip_thrust",
+    "name": "Smith Machine Hip Thrust",
+    "group": "Legs",
+    "primaryMuscles": ["gluteal"],
+    "secondaryMuscles": ["hamstring"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_smith_machine_lunge",
+    "name": "Smith Machine Lunge",
+    "group": "Legs",
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["gluteal", "hamstring"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_pendulum_squat",
+    "name": "Pendulum Squat",
+    "group": "Legs",
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["gluteal", "hamstring"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_belt_squat",
+    "name": "Belt Squat",
+    "group": "Legs",
+    "primaryMuscles": ["quadriceps"],
+    "secondaryMuscles": ["gluteal", "hamstring", "adductor"],
+    "equipment": "machine"
+  },
+  {
+    "id": "gap_hanging_knee_raise",
+    "name": "Hanging Knee Raise",
+    "group": "Core",
+    "primaryMuscles": ["abs"],
+    "secondaryMuscles": ["forearm"],
+    "equipment": "bodyweight"
+  }
+]
