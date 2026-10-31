@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 
 export type Route =
   | { name: 'home' }
@@ -37,6 +38,17 @@ export function parseRoute(hash: string): Route {
 
 export function go(route: Route): void {
   window.location.hash = href(route);
+}
+
+/**
+ * `go`, with the new screen on the page before this returns. iOS raises the keyboard
+ * only for a focus inside the tap, and the real hashchange event arrives after it.
+ */
+export function goWithinTap(route: Route): void {
+  flushSync(() => {
+    go(route);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+  });
 }
 
 function subscribe(listener: () => void): () => void {
