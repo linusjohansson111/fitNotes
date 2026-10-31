@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type SubmitEvent, useMemo, useState } from 'react';
 import type { Equipment } from '../domain/types';
 import { saveCustomExercise } from '../store';
 import { BodyMap } from './BodyMap';
@@ -27,7 +27,7 @@ export function CustomScreen({ initialName = '' }: { initialName?: string }) {
   const trimmedName = name.trim();
   const valid = trimmedName !== '' && primary.length > 0;
 
-  async function save(event: FormEvent) {
+  async function save(event: SubmitEvent) {
     event.preventDefault();
     if (!valid || saving) return;
     setSaving(true);

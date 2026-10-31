@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useReducer, useState } from 'react';
+import { type FocusEvent, type ReactNode, type SubmitEvent, useReducer, useState } from 'react';
 import type { Queries } from '../app/queries';
 import { today } from '../domain/date';
 import type { Entry, Exercise, Equipment } from '../domain/types';
@@ -43,7 +43,7 @@ function Stepper({
   );
 }
 
-function selectAll(event: FormEvent<HTMLInputElement>) {
+function selectAll(event: FocusEvent<HTMLInputElement>) {
   event.currentTarget.select();
 }
 
@@ -80,7 +80,7 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
     }
   }
 
-  function save(event: FormEvent) {
+  function save(event: SubmitEvent) {
     event.preventDefault();
     if (!result) return;
     const { date: entryDate, weightKg, reps, bodyweightKg } = result;

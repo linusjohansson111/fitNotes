@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type SubmitEvent, useState } from 'react';
 import type { Queries } from '../app/queries';
 import { connectBackup, useBackupStatus } from '../backup';
 import { today } from '../domain/date';
@@ -11,7 +11,7 @@ function BodyweightForm({ queries }: { queries: Queries }) {
   const kg = parseKg(text);
   const changed = kg !== null && kg > 0 && kg !== current;
 
-  function save(event: FormEvent) {
+  function save(event: SubmitEvent) {
     event.preventDefault();
     if (changed) void setBodyweight(today(), kg);
   }
@@ -50,7 +50,7 @@ function BackupForm() {
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
-  async function connect(event: FormEvent) {
+  async function connect(event: SubmitEvent) {
     event.preventDefault();
     if (!token.trim() || connecting) return;
     setConnecting(true);
