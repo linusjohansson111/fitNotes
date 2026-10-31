@@ -752,6 +752,14 @@ describe('repo privacy', () => {
     expect(status(hook).error).toContain('not private');
     expect(app.store.isDirty()).toBe(true);
     expect(app.store.getAppData()?.entries).toHaveLength(1);
+
+    // Later triggers in the session are refused too, not waved through by the first check.
+    await act(async () => {
+      setVisibility('visible');
+      await settle();
+    });
+    expect(gh.puts).toEqual([]);
+    expect(status(hook).state).toBe('error');
   });
 
   it('holds back data left dirty by the last session', async () => {

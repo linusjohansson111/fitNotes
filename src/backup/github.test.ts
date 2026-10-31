@@ -257,6 +257,14 @@ describe('repo privacy', () => {
     expect(gh.text).toBeNull();
   });
 
+  it('keeps refusing while the repo stays public', async () => {
+    const target = freshOwner('still-public');
+    gh.repoPrivate = false;
+    expect(await kindOf(target.write(withCustom, null))).toBe('repo-public');
+    expect(await kindOf(target.write(withCustom, null))).toBe('repo-public');
+    expect(gh.puts).toEqual([]);
+  });
+
   it('refuses to read a backup-less public repo as simply empty', async () => {
     const target = freshOwner('empty-public');
     gh.repoPrivate = false;

@@ -183,7 +183,8 @@ export function stopBackup(): void {
 
 /**
  * Connects this install and restores from the backup. Rejects with a
- * BackupError; nothing is stored unless the token can read the backup.
+ * BackupError; nothing is stored or restored unless the repo is private and
+ * the token can read the backup.
  */
 export async function connectBackup(token: string): Promise<void> {
   const target = await GithubTarget.connect(token);
