@@ -1,6 +1,11 @@
 :root {
   color-scheme: dark;
   --bg: #000;
+  --surface: #111113;
+  --line: #2c2c2e;
+  --text: #fff;
+  --muted: #8e8e93;
+  --grey: #3a3a3c;
   --red: #ff3b30;
   --yellow: #ffd60a;
   --green: #30d158;
@@ -9,6 +14,8 @@ html,
 body {
   margin: 0;
   background: var(--bg);
-  color: #fff;
+  color: var(--text);
   font-family: -apple-system, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
 }

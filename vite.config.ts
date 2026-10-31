@@ -37,5 +37,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
     restoreMocks: true,
+    // The model's property tests take several seconds when the whole suite runs at once.
+    testTimeout: 30_000,
   },
 });

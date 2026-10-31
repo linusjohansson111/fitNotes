@@ -10,7 +10,7 @@ import {
 } from './load';
 import { type ModelInput, type State, liveEntries, loadsOn, replay } from './replay';
 
-export { DEFAULT_BODYWEIGHT_KG, e1rm, roundToLoadable };
+export { DEFAULT_BODYWEIGHT_KG, bodyweightOn, e1rm, roundToLoadable };
 export type { ModelInput };
 
 export interface StrengthPoint {
