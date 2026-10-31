@@ -1,0 +1,14 @@
+:root {
+  color-scheme: dark;
+  --bg: #000;
+  --red: #ff3b30;
+  --yellow: #ffd60a;
+  --green: #30d158;
+}
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: #fff;
+  font-family: -apple-system, system-ui, sans-serif;
+}
