@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,6 +31,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -81,6 +82,36 @@ describe('AC1: the shell', () => {
   });
 });
 
+describe('AC3: opening search', () => {
+  it.each(['Add exercise', 'Add an exercise'])('focuses the input within a tap on %s', async (name) => {
+    render(<App />);
+    const link = await screen.findByRole('link', { name });
+    // No awaiting after the tap: iOS raises the keyboard only for a focus inside it.
+    fireEvent.click(link);
+    expect(document.activeElement).toBe(screen.getByRole('searchbox'));
+    expect(window.location.hash).toBe('#/search');
+  });
+});
+
+describe('AC5: a form left open overnight', () => {
+  it("restarts on today's date when the app comes back on a new day", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 2, 1, 23, 50));
+    window.location.hash = `#/log/${BENCH}`;
+    render(<App />);
+    const date = () => screen.getByLabelText('Date') as HTMLInputElement;
+    await screen.findByLabelText('Date');
+    expect(date().value).toBe('2026-03-01');
+
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(date().value).toBe('2026-03-01');
+
+    vi.setSystemTime(new Date(2026, 2, 2, 7, 0));
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(date().value).toBe('2026-03-02');
+  });
+});
+
 describe('AC4: repeating a lift', () => {
   it('takes two taps from home and shows the new next weight', async () => {
     const user = userEvent.setup();
@@ -100,10 +131,12 @@ describe('AC4: repeating a lift', () => {
 
 describe('boot', () => {
   it('starts backup', async () => {
-    document.body.innerHTML = '<div id="root"></div>';
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.append(root);
     const { startBackup } = await import('./backup');
     await import('./main');
     expect(startBackup).toHaveBeenCalled();
-    document.body.innerHTML = '';
+    root.remove();
   });
 });

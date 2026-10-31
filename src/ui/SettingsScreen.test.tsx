@@ -18,7 +18,7 @@ vi.mock('../store', () => ({ setBodyweight: vi.fn(async () => {}) }));
 
 const TOKEN = 'github_pat_secret';
 const bodyweight = () => screen.getByLabelText('Bodyweight') as HTMLInputElement;
-const token = () => screen.getByLabelText('Backup') as HTMLInputElement;
+const token = () => screen.getByLabelText('GitHub token') as HTMLInputElement;
 const connect = () => screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement;
 
 beforeEach(() => {

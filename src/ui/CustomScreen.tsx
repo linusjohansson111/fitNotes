@@ -14,7 +14,7 @@ const EQUIPMENT: [Equipment, string][] = [
   ['bodyweight', 'Bodyweight'],
   ['other', 'Other'],
 ];
-const MAP_HEIGHT = 300;
+const MAP_HEIGHT = 340;
 
 export function CustomScreen({ initialName = '' }: { initialName?: string }) {
   const [name, setName] = useState(initialName);
@@ -75,7 +75,7 @@ export function CustomScreen({ initialName = '' }: { initialName?: string }) {
         ))}
       </div>
 
-      <p className="hint">Tap a muscle: once for primary, again for secondary.</p>
+      <p className="hint">Tap once for primary, twice for secondary.</p>
       <div className="custom-map">
         <BodyMap
           fills={fills}

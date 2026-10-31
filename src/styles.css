@@ -128,7 +128,7 @@ ul {
   color: var(--text);
 }
 .bar a.bar-add {
-  color: var(--accent);
+  color: var(--text);
 }
 
 /* Shared */
@@ -369,7 +369,7 @@ ul {
 }
 .result-map {
   flex: none;
-  width: 64px;
+  width: 56px;
   height: 56px;
 }
 
@@ -399,7 +399,6 @@ ul {
 .custom-map {
   display: flex;
   justify-content: center;
-  min-height: 300px;
 }
 
 /* Settings */
@@ -412,6 +411,7 @@ ul {
 .settings-label {
   color: var(--muted);
   font-size: 15px;
+  font-weight: 400;
 }
 .settings-row {
   display: flex;

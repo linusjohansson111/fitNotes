@@ -66,9 +66,7 @@ function BackupForm() {
 
   return (
     <form className="settings-section" onSubmit={(event) => void connect(event)}>
-      <label className="settings-label" htmlFor="token">
-        Backup
-      </label>
+      <h2 className="settings-label">Backup</h2>
       {connected ? (
         <p className="hint">{backupLine(state, lastBackupAt)}</p>
       ) : (
@@ -81,8 +79,8 @@ function BackupForm() {
       {connectError && <p className="error">{connectError}</p>}
       <div className="settings-row">
         <input
-          id="token"
           type="password"
+          aria-label="GitHub token"
           placeholder={connected ? 'Paste a new token' : 'GitHub token'}
           autoComplete="off"
           autoCorrect="off"

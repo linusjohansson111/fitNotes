@@ -4,6 +4,7 @@ import { today } from '../domain/date';
 import { formatKg } from './format';
 import { GraphIcon, SettingsIcon } from './icons';
 import { href } from './nav';
+import { SearchLink } from './SearchLink';
 
 function Row({ exercise, next }: LoggedExercise) {
   return (
@@ -33,9 +34,7 @@ function Empty() {
   return (
     <div className="empty">
       <p>Nothing logged yet.</p>
-      <a className="save" href={href({ name: 'search' })}>
-        Add an exercise
-      </a>
+      <SearchLink className="save">Add an exercise</SearchLink>
       {!connected && (
         <a className="quiet" href={href({ name: 'settings' })}>
           Restore from backup

@@ -4,6 +4,7 @@ import { ExerciseScreen } from './ui/ExerciseScreen';
 import { HomeScreen } from './ui/HomeScreen';
 import { LogScreen } from './ui/LogScreen';
 import { MapScreen } from './ui/MapScreen';
+import { SearchLink } from './ui/SearchLink';
 import { SearchScreen } from './ui/SearchScreen';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { BodyIcon, HomeIcon, PlusIcon } from './ui/icons';
@@ -35,14 +36,13 @@ function BottomBar({ route }: { route: Route }) {
       <a href={href({ name: 'home' })} aria-label="Home" aria-current={route.name === 'home' ? 'page' : undefined}>
         <HomeIcon />
       </a>
-      <a
+      <SearchLink
         className="bar-add"
-        href={href({ name: 'search' })}
         aria-label="Add exercise"
         aria-current={route.name === 'search' ? 'page' : undefined}
       >
         <PlusIcon size={40} />
-      </a>
+      </SearchLink>
       <a href={href({ name: 'map' })} aria-label="Map" aria-current={route.name === 'map' ? 'page' : undefined}>
         <BodyIcon />
       </a>
