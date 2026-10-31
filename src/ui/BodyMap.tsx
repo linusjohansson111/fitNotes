@@ -6,6 +6,8 @@ import './insight.css';
 
 const BODY_COLOUR = '#3a3a3c';
 const DEFAULT_HEIGHT = 160;
+/** The hands reach the edge of each figure, so the two need a little air, as a share of height. */
+const FIGURE_GAP = 0.05;
 
 export interface BodyMapProps {
   /** CSS colour per muscle. Muscles left out show as the plain body colour. */
@@ -55,7 +57,10 @@ export const BodyMap = memo(
     const shared = { data: rows, highlightedColors: colours, bodyColor: BODY_COLOUR, onClick };
 
     return (
-      <div className={onMuscle ? 'ins-body ins-body--tap' : 'ins-body'} style={{ width: height }}>
+      <div
+        className={onMuscle ? 'ins-body ins-body--tap' : 'ins-body'}
+        style={{ width: height * (1 + FIGURE_GAP), gap: height * FIGURE_GAP }}
+      >
         <Model type="anterior" {...shared} />
         <Model type="posterior" {...shared} />
       </div>

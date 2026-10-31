@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueries } from '../app/queries';
 import { COLOURS, TARGET_REPS, colourForReps } from '../domain/colour';
 import { today } from '../domain/date';
-import type { Colour, Entry, Prediction } from '../domain/types';
+import type { Colour, Entry, ISODate, Prediction } from '../domain/types';
 import { setNote } from '../store';
 import { formatKg } from './format';
 import './insight.css';
@@ -33,13 +33,15 @@ function Note({ exerciseId, note }: { exerciseId: string; note: string }) {
   const draft = useRef(note);
   const saved = useRef(note);
 
-  const save = useRef(() => {
-    if (draft.current === saved.current) return;
+  const save = useCallback(() => {
+    const previous = saved.current;
+    if (draft.current === previous) return;
     saved.current = draft.current;
     setNote(exerciseId, draft.current).catch((error: unknown) => {
+      saved.current = previous; // Lets the next blur try again.
       console.error('fitNotes: could not save the note', error);
     });
-  }).current;
+  }, [exerciseId]);
 
   useEffect(() => {
     const saveWhenHidden = () => {
@@ -68,7 +70,7 @@ function Note({ exerciseId, note }: { exerciseId: string; note: string }) {
   );
 }
 
-function History({ exerciseId, entries, asOf }: { exerciseId: string; entries: Entry[]; asOf: string }) {
+function History({ exerciseId, entries, asOf }: { exerciseId: string; entries: Entry[]; asOf: ISODate }) {
   return (
     <ol className="ins-history" aria-label="History">
       {entries.map((entry) => (
@@ -94,7 +96,7 @@ export function ExerciseScreen({ exerciseId }: { exerciseId: string }) {
   if (!exercise) {
     return (
       <div className="ins-screen">
-        <p className="ins-line-text">This exercise no longer exists.</p>
+        <p className="ins-hint">This exercise no longer exists.</p>
         <a className="ins-link" href={href({ name: 'home' })}>
           Home
         </a>
@@ -121,10 +123,7 @@ export function ExerciseScreen({ exerciseId }: { exerciseId: string }) {
 
       {prediction && <Weights prediction={prediction} current={exercise.colour} />}
 
-      <a
-        className={`ins-log ins-${exercise.colour}`}
-        href={href({ name: 'log', exerciseId })}
-      >
+      <a className={`ins-log ins-${exercise.colour}`} href={href({ name: 'log', exerciseId })}>
         Log
       </a>
 

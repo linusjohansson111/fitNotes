@@ -99,10 +99,13 @@ describe('BodyMap', () => {
     expect(fillsOf(container)).toContain('rgb(48, 209, 88)');
   });
 
-  it('sizes itself from height and may shrink inside a narrow row', () => {
-    const { container } = render(<BodyMap fills={{}} height={64} />);
+  it('fits two half-height figures and their gap, and marks itself tappable only with onMuscle', () => {
+    const { container, rerender } = render(<BodyMap fills={{}} height={100} />);
     const root = container.firstElementChild as HTMLElement;
-    expect(root.style.width).toBe('64px');
+    expect(root.style.width).toBe('105px');
+    expect(root.style.gap).toBe('5px');
     expect(root.className).toBe('ins-body');
+    rerender(<BodyMap fills={{}} height={100} onMuscle={() => {}} />);
+    expect(root.className).toContain('ins-body--tap');
   });
 });

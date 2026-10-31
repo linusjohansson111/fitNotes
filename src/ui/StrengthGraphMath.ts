@@ -26,7 +26,7 @@ const Y_PADDING_SHARE = 0.12;
 const MIN_Y_PADDING_KG = 1;
 const MAX_DOT_RADIUS = 4.5;
 const MIN_DOT_RADIUS = 2.5;
-const OTHER_DOT_SHARE = 0.6;
+const OTHER_DOT_SHARE = 0.67;
 
 export interface GraphLine {
   colour: Colour;
@@ -156,7 +156,7 @@ export function layoutGraph(
     d: path(points.map(({ date, kg }) => ({ x: xOf(date), y: yOf(kg) }))),
   }));
 
-  const radius = dotRadius(shown.length, width);
+  const radius = dotRadius(shown.filter(({ colour }) => colour === current).length, width);
   const dots = currentLast(current).flatMap((colour) =>
     shown
       .filter((dot) => dot.colour === colour)

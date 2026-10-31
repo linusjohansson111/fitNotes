@@ -31,7 +31,7 @@ function Detail({ muscle, detail }: { muscle: Muscle; detail: MuscleDetail | nul
     return (
       <section className="ins-detail" aria-label={name}>
         <h2 className="ins-detail-name">{name}</h2>
-        <p className="ins-line-text">No data for this muscle yet.</p>
+        <p className="ins-hint">No data for this muscle yet.</p>
       </section>
     );
   }
@@ -118,7 +118,7 @@ export function MapScreen() {
       <div className="ins-map-figure">
         <BodyMap fills={fills} onMuscle={setSelected} height={FIGURE_HEIGHT} />
       </div>
-      {hasData ? <Legend /> : <p className="ins-line-text">Log a lift like bench press or squat to fill the map.</p>}
+      {hasData ? <Legend /> : <p className="ins-hint">Log a lift like bench press or squat to fill the map.</p>}
       {selected && <Detail muscle={selected} detail={queries.muscleDetail(selected, date)} />}
       {queries.bodyweightKg(date) === null && <BodyweightInput date={date} />}
     </div>
