@@ -11,9 +11,6 @@ const REQUEST_TIMEOUT_MS = 30_000;
 // String.fromCharCode(...bytes) overflows the argument limit on a whole backup.
 const BASE64_CHUNK = 0x8000;
 
-// Owners whose repo was confirmed private this app session, so only the first push pays a request.
-const confirmedPrivate = new Set<string>();
-
 export type BackupErrorKind =
   | 'auth'
   | 'repo-not-found'
@@ -183,7 +180,6 @@ export class GithubTarget implements BackupTarget {
         `The repo ${REPO} is not private, so nothing was backed up. Make it private on GitHub and try again.`,
       );
     }
-    confirmedPrivate.add(this.owner);
   }
 
   async read(): Promise<{ snapshot: Snapshot; sha: string } | null> {
@@ -211,7 +207,8 @@ export class GithubTarget implements BackupTarget {
   }
 
   async write(snapshot: Snapshot, sha: string | null): Promise<void> {
-    if (!confirmedPrivate.has(this.owner)) await this.verifyRepo();
+    // Checked every time: iOS can keep the app alive for days, and the repo can go public meanwhile.
+    await this.verifyRepo();
     const reply = await call(this.token, `${this.repoPath}/contents/${FILE}`, {
       method: 'PUT',
       body: JSON.stringify({

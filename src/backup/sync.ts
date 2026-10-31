@@ -141,7 +141,9 @@ function trigger(): void {
 }
 
 function onVisibilityChange(): void {
-  if (document.visibilityState === 'visible') trigger();
+  // Going hidden too: iOS gives no background time, so a set logged just before locking
+  // the phone would otherwise wait for the next open, past the debounce.
+  if (document.visibilityState === 'visible' || isDirty()) trigger();
 }
 
 async function loadStatus(): Promise<void> {

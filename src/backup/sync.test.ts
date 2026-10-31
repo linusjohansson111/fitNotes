@@ -813,7 +813,7 @@ describe('repo privacy', () => {
     expect(status(hook)).toMatchObject({ state: 'idle', error: null });
   });
 
-  it('adds one check per session, however many syncs run', async () => {
+  it('checks before every push, so a repo made public mid-session stops receiving data', async () => {
     await nextSession();
     app.backup.startBackup();
     await settle();
@@ -825,7 +825,12 @@ describe('repo privacy', () => {
     }
 
     expect(gh.puts).toHaveLength(3);
-    expect(repoChecks()).toHaveLength(1);
+    expect(repoChecks()).toHaveLength(3);
+
+    gh.repoPrivate = false;
+    await app.store.addEntry(set('2026-10-04'));
+    await advance(5_000);
+    expect(gh.puts).toHaveLength(3);
   });
 
   it('adds no check when nothing needs pushing', async () => {
@@ -835,7 +840,7 @@ describe('repo privacy', () => {
     expect(repoChecks()).toEqual([]);
   });
 
-  it('adds no check in the session that connected, which already verified the repo', async () => {
+  it('checks before a push in the session that connected too', async () => {
     await app.store.setNote('bench', 'First backup');
     await connected();
     app.backup.startBackup();
@@ -846,7 +851,7 @@ describe('repo privacy', () => {
     await advance(5_000);
 
     expect(gh.puts).toHaveLength(1);
-    expect(repoChecks()).toEqual([]);
+    expect(repoChecks()).toHaveLength(1);
   });
 
   it('checks again in each new session', async () => {
@@ -949,6 +954,18 @@ describe('triggers', () => {
     expect(app.store.isDirty()).toBe(false);
   });
 
+  it('backs up straight away when the app goes hidden with unsaved work', async () => {
+    await connected();
+    app.backup.startBackup();
+    await settle();
+    await app.store.addEntry(set('2026-10-01'));
+
+    setVisibility('hidden');
+    await settle();
+
+    expect(gh.snapshot.entries).toHaveLength(1);
+  });
+
   it('runs one sync at a time when triggers collide', async () => {
     await app.store.setNote('bench', 'Seed');
     await connected();
@@ -977,7 +994,7 @@ describe('triggers', () => {
 
     expect(peak).toBe(1);
     expect(gh.puts).toHaveLength(1);
-    expect(gh.calls.length).toBeLessThanOrEqual(3);
+    expect(gh.calls.length).toBeLessThanOrEqual(4);
   });
 
   it('runs a second pass for a write landing during a sync, and stays dirty until then', async () => {
@@ -1127,6 +1144,8 @@ describe('retry timer', () => {
   it('does not fire while hidden', async () => {
     await failedPush();
     setVisibility('hidden');
+    await settle();
+    gh.calls = [];
     await advance(WEEK_MS);
     expect(gh.calls).toEqual([]);
 

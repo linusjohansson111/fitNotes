@@ -218,7 +218,6 @@ describe('errors', () => {
 });
 
 describe('repo privacy', () => {
-  /** github.ts remembers confirmed owners per session, so each test needs an owner of its own. */
   function freshOwner(name: string): GithubTarget {
     gh.login = name;
     return new GithubTarget(gh.token, name);
@@ -271,13 +270,13 @@ describe('repo privacy', () => {
     expect(await kindOf(target.read())).toBe('repo-public');
   });
 
-  it('checks a private repo once, on the first write', async () => {
+  it('checks a private repo before every write', async () => {
     const target = freshOwner('private-owner');
     await target.write(emptySnapshot(), null);
     const first = await target.read();
     await target.write(withCustom, first?.sha ?? null);
 
-    expect(gh.calls.filter((call) => call.path === `/repos/private-owner/fitnotes-data`)).toHaveLength(1);
+    expect(gh.calls.filter((call) => call.path === `/repos/private-owner/fitnotes-data`)).toHaveLength(2);
     expect(gh.puts).toHaveLength(2);
   });
 
