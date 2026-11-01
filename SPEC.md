@@ -4,7 +4,7 @@
 On my iPhone, I log the strongest set of an exercise in seconds and immediately see what weight should hit my target reps next time. Colour-led graphs show my progress per exercise and which muscles lag behind the rest of my body. The app is a guide and a second memory: I make every training decision myself. Every exercise I can pick works everywhere, because search, predictions and the muscle map all read one complete record.
 
 ## Out of scope
-Cardio; stretching, plyometrics, strongman, Olympic lifts, timed holds and anything without a real kg figure; custom exercises; sets or volume; workout plans or exercise suggestions; native or App Store builds; Watch, widgets or Apple Health; other users; history import; pounds; showing accuracy, ranges or uncertainty in the app.
+Cardio; stretching, plyometrics, strongman, dynamic lifts driven by momentum, timed holds and anything without a real kg figure; custom exercises; sets or volume; workout plans or exercise suggestions; native or App Store builds; Watch, widgets or Apple Health; other users; history import; pounds; showing accuracy, ranges or uncertainty in the app.
 
 ## Touches
 The app exists at v1.0.0. This change is AC3, AC16 and AC18-25; every other criterion already passes and must keep passing.
@@ -20,11 +20,12 @@ The app exists at v1.0.0. This change is AC3, AC16 and AC18-25; every other crit
 - `backup`: automatic sync to a private free-tier store, and restore on a fresh install. `Snapshot` keeps its format, including `customExercises`, so existing backups still read.
 - Removed: `src/ui/CustomScreen.tsx`, the `custom` route in `src/ui/nav.ts` and `src/App.tsx`, the add link in `src/ui/SearchScreen.tsx`, and `saveCustomExercise`.
 - `src/ui/MapScreen.tsx`: shows the attribution link. `README.md`, `docs/ARCHITECTURE.md` and `e2e/smoke.mjs` follow these changes.
+- `scripts/build-exercises.mjs`, `src/data/catalogue.json`, `src/data/index.test.ts` and the published table take the row changes in `docs/catalogue-fixes.md`.
 
 ## Decisions
 - **Home Screen web app, offline first, automatic cloud backup.** It can be built on this Linux machine with no Apple fee, and [Apple's storage policy](https://webkit.org/?p=14403) gives no clear guarantee that local data lasts.
 - **Bank from [free-exercise-db](https://github.com/yuhonas/free-exercise-db) plus filled gaps; body map from [react-body-highlighter](https://github.com/giavinh79/react-body-highlighter).** Both are open, and posed figures aren't openly available at good quality.
-- **The bank holds only lifts logged as kg × reps, about 585 rows.** Stretching, plyometrics, strongman, Olympic lifts (including Power Clean), bands, balls and timed holds can't feed the calculations and are clutter. Rows with a real kg figure stay, such as Trap Bar Deadlift, Front Plate Raise and Donkey Calf Raises. Existing ids don't change.
+- **The bank holds only controlled lifts logged as kg × reps, about 535 rows.** Stretching, plyometrics, strongman, bands, balls and timed holds can't feed the calculations and are clutter. Dynamic lifts driven by momentum go with any implement, including cleans, snatches, jerks, push presses, thrusters and swings, because the owner never trains them. Controlled lifts stay even if the source files them as Olympic, such as Clean Deadlift and Overhead Squat. Other rows with a real kg figure stay, such as Trap Bar Deadlift, Front Plate Raise and Donkey Calf Raises. Existing ids don't change.
 - **One record per exercise, and no custom exercises.** A row can't disagree with itself, and a free-form exercise can't be checked. Wrong source data is corrected in the record. Search tolerates typos, because a misspelling has no custom exercise to fall back on.
 - **Black UI with red, yellow or green accents; groups are Chest, Back, Shoulders, Arms, Legs, Core.** Essentials only: colour and graphs lead, numbers support.
 - **Every entry is the workout's strongest set at maximum effort.** This is the owner's rule and needs no effort input. If two entries share a date, the stronger feeds the model.
@@ -41,13 +42,14 @@ The app exists at v1.0.0. This change is AC3, AC16 and AC18-25; every other crit
 - **Confidence scales a lift's weight on the map: high 1, medium 0.75, low 0.5, on top of primary 1 and secondary 0.5.** A guess shouldn't outvote a measured lift. Base lifts are high.
 - **One editable table raises Shoulders by 1.15, Back by 1.1 and Arms by 1.1.** This is judgement, as no published bodybuilder table was found.
 - **No Strength Level data.** [Its policy](https://strengthlevel.com/data-licensing) forbids copying its standards or deriving ratios from them, even for personal apps, so its values may not be used or consulted. The old tables stay in git history by the owner's choice.
-- **Built on a branch, released after review.** The first commit deletes the old table, so ratios can't draw on it. Work stops at a published table of every exercise. A separate session checks it, then one release replaces old with new, with no force-push. The release stops if a live entry in the backup has no row, because Home hides such entries.
+- **The owner accepts one exposure of the old table.** The session that wrote the ratios saw its first two lifts and some test values before deleting it, and reports using none. That can't be proved without opening the table, and the bench and incline rows looked reasonable in review, so no ratio is rewritten for this reason.
+- **Built on a branch, released after review.** The first commit deletes the old table, so ratios can't draw on it. Work stops at a published table of every exercise. The first review's fixes are in `docs/catalogue-fixes.md`. Once they are published, a separate session re-checks only the changed, added and dropped rows and confirms the rest are unchanged, because the first review read every row. Then one release replaces old with new, with no force-push. The release stops if a live entry in the backup has no row, because Home hides such entries.
 - **No accuracy target.** Prediction error is checked outside the app and should fall as logs grow.
 
 ## Acceptance criteria
 1. When the app is opened offline from the Home Screen, the system shall show home and save new entries.
 2. When the phone reconnects, the system shall back up entries without user action; when freshly installed, it shall restore all records.
-3. When the user searches, the system shall list matching exercises from about 585 with front and back maps, primary muscles brighter than secondary, shall rank Incline Dumbbell Press first for "Incline Dumbell Press", and shall offer no way to add an exercise.
+3. When the user searches, the system shall list matching exercises from about 535 with front and back maps, primary muscles brighter than secondary, shall rank Incline Dumbbell Press first for "Incline Dumbell Press", and shall offer no way to add an exercise.
 4. When home opens, the system shall list only logged exercises by group, most recent first, each with its colour and next weight.
 5. When the logging form opens, the system shall start on predicted weight, target reps and today, with no sets field. A new exercise starts yellow, 8 reps, blank weight.
 6. When reps cross 6/7 or 9/10 in either direction, the system shall switch colour immediately, and change the weight only if the user hasn't edited it.
@@ -63,7 +65,7 @@ The app exists at v1.0.0. This change is AC3, AC16 and AC18-25; every other crit
 16. When any exercise in search is logged, the system shall predict for it and count it on the muscle map for each of its muscles.
 17. When a simulated 12-month log is replayed, the system shall have lower mean prediction error over the last 20 sessions than the first 5.
 18. When `scripts/build-exercises.mjs` runs, the system shall fail if any row lacks an `ExerciseDef` field, names an unknown base lift, has a ratio that isn't positive, or has a group that doesn't match its first primary muscle.
-19. When the catalogue is read, the system shall hold no stretching, plyometric, strongman, Olympic, band, ball or timed-hold row, and shall hold `Wide-Grip_Lat_Pulldown`, `Barbell_Deadlift`, `Dumbbell_Bicep_Curl`, `Incline_Dumbbell_Press`, `Seated_Cable_Rows`, Trap Bar Deadlift, Front Plate Raise and Donkey Calf Raises.
+19. When the catalogue is read, the system shall hold no stretching, plyometric, strongman, dynamic, band, ball or timed-hold row, shall hold none of the rows dropped in `docs/catalogue-fixes.md`, and shall hold `Wide-Grip_Lat_Pulldown`, `Barbell_Deadlift`, `Dumbbell_Bicep_Curl`, `Incline_Dumbbell_Press`, `Seated_Cable_Rows`, Trap Bar Deadlift, Front Plate Raise, Donkey Calf Raises, `Clean_Deadlift`, `Overhead_Squat` and `Weighted_Crunches`.
 20. When `Dips_-_Chest_Version` or `Bench_Press_-_Powerlifting` is read, the system shall list chest as a primary muscle.
 21. When `Incline_Dumbbell_Press` is the only logged exercise, the system shall show chest, front delts and triceps as yellow and every other muscle as grey.
 22. When two logged lifts on one muscle differ only in confidence, the system shall let the higher-confidence lift move that muscle's level more.
@@ -72,4 +74,4 @@ The app exists at v1.0.0. This change is AC3, AC16 and AC18-25; every other crit
 25. When an existing version 1 backup is restored, the system shall read it and restore every entry.
 
 ## Done when
-A published table lists every exercise with its muscles, equipment, base lift, ratio, reason and confidence, and a separate session has found it reasonable. Then, on an iPhone with the app installed and in airplane mode, search "Incline Dumbell Press", log it, and see chest, front delts and triceps fill on the muscle map above the FitnessVolt link; log it again with reps in another colour and see the graph and muscle map update. Reconnect, delete and reinstall the app, and confirm every record is restored.
+A published table lists every exercise with its muscles, equipment, base lift, ratio, reason and confidence, and a separate session has found its changed rows reasonable. Then, on an iPhone with the app installed and in airplane mode, search "Incline Dumbell Press", log it, and see chest, front delts and triceps fill on the muscle map above the FitnessVolt link; log it again with reps in another colour and see the graph and muscle map update. Reconnect, delete and reinstall the app, and confirm every record is restored.
