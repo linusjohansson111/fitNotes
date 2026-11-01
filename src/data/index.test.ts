@@ -1,4 +1,11 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+// @ts-expect-error -- plain JavaScript, shared with the build script.
+import { validateRows } from '../../scripts/validate-exercises.mjs';
+import { BASE_LIFTS } from '../balance';
 import type { ExerciseDef, Group, Muscle } from '../domain/types';
 import gaps from './gaps.json';
 import { EXERCISES, searchExercises } from './index';
@@ -49,11 +56,24 @@ const row = (name: string): ExerciseDef => {
 };
 const firstName = (query: string): string | undefined =>
   searchExercises(query, EXERCISES, 1)[0]?.name;
-const isStretching = (exercise: ExerciseDef): boolean => 'stretching' in exercise;
+const byId = (id: string): ExerciseDef | undefined => EXERCISES.find((exercise) => exercise.id === id);
+const REPO = join(import.meta.dirname, '../..');
+const BASE_LIFT_NAMES = Object.keys(BASE_LIFTS);
+const GOOD_ROW = byId('Barbell_Squat') as ExerciseDef;
+const validate = (row: object): void => validateRows([row], BASE_LIFT_NAMES);
+
+/** Every file under a repo folder. */
+function filesIn(folder: string): string[] {
+  return readdirSync(folder).flatMap((name) => {
+    const path = join(folder, name);
+    return statSync(path).isDirectory() ? filesIn(path) : [path];
+  });
+}
 
 describe('exercise bank', () => {
-  it('holds 800+ rows (AC3)', () => {
-    expect(EXERCISES.length).toBeGreaterThanOrEqual(800);
+  it('holds about 585 rows (AC3)', () => {
+    expect(EXERCISES.length).toBeGreaterThan(550);
+    expect(EXERCISES.length).toBeLessThan(620);
   });
 
   it('has unique ids', () => {
@@ -63,6 +83,7 @@ describe('exercise bank', () => {
   it('keeps source ids, so backups survive a regeneration', () => {
     expect(row('Barbell Bench Press - Medium Grip').id).toBe('Barbell_Bench_Press_-_Medium_Grip');
     expect(row('3/4 Sit-Up').id).toBe('3_4_Sit-Up');
+    expect(row('Overhead Press').id).toBe('gap_overhead_press');
   });
 
   it('has only valid rows', () => {
@@ -85,19 +106,20 @@ describe('exercise bank', () => {
     }
   });
 
-  it('carries only ExerciseDef fields, plus the stretching flag', () => {
-    const allowed = new Set([
+  it('carries exactly the ExerciseDef fields', () => {
+    const fields = [
+      'baseLift',
+      'confidence',
+      'equipment',
+      'group',
       'id',
       'name',
-      'group',
       'primaryMuscles',
+      'ratio',
+      'reason',
       'secondaryMuscles',
-      'equipment',
-      'stretching',
-    ]);
-    for (const exercise of EXERCISES) {
-      for (const key of Object.keys(exercise)) expect(allowed.has(key), key).toBe(true);
-    }
+    ];
+    for (const exercise of EXERCISES) expect(Object.keys(exercise).sort(), exercise.id).toEqual(fields);
   });
 
   it('has no cardio', () => {
@@ -105,10 +127,67 @@ describe('exercise bank', () => {
     for (const id of CARDIO_IDS) expect(ids.has(id), id).toBe(false);
   });
 
-  it('keeps the stretches, after every strength row', () => {
-    const stretches = EXERCISES.filter(isStretching);
-    expect(stretches.length).toBe(123);
-    expect(EXERCISES.slice(-stretches.length).every(isStretching)).toBe(true);
+  it('AC19: holds no stretching, plyometric, strongman, Olympic, band, ball or timed-hold row', () => {
+    const ids = new Set(EXERCISES.map(({ id }) => id));
+    for (const id of [
+      'Hamstring_Stretch',
+      'Box_Jump_Multiple_Response',
+      'Atlas_Stones',
+      'Farmers_Walk',
+      'Snatch',
+      'Clean_and_Jerk',
+      'Power_Clean',
+      'Clean_and_Press',
+      'Band_Pull_Apart',
+      'Reverse_Band_Deadlift',
+      'Exercise_Ball_Crunch',
+      'One-Arm_Medicine_Ball_Slam',
+      'Plank',
+      'Side_Bridge',
+      'Sled_Row',
+    ]) {
+      expect(ids.has(id), id).toBe(false);
+    }
+    for (const { name } of EXERCISES) expect(name, name).not.toMatch(/\bbands?\b|\bball\b|stretch\b|\bjump\b|^plank/i);
+  });
+
+  it('AC19: holds the lifts people actually log', () => {
+    const names = new Set(EXERCISES.map(({ name }) => name));
+    for (const id of [
+      'Wide-Grip_Lat_Pulldown',
+      'Barbell_Deadlift',
+      'Dumbbell_Bicep_Curl',
+      'Incline_Dumbbell_Press',
+      'Seated_Cable_Rows',
+    ]) {
+      expect(byId(id), id).toBeDefined();
+    }
+    for (const name of ['Trap Bar Deadlift', 'Front Plate Raise', 'Donkey Calf Raises']) {
+      expect(names.has(name), name).toBe(true);
+    }
+  });
+
+  it('AC20: lists chest as a primary muscle of the chest lifts the source had wrong', () => {
+    for (const id of ['Dips_-_Chest_Version', 'Bench_Press_-_Powerlifting']) {
+      expect(byId(id)?.primaryMuscles, id).toContain('chest');
+    }
+  });
+
+  it('gives every base lift a row at ratio 1 and high confidence', () => {
+    for (const baseLift of BASE_LIFT_NAMES) {
+      const rows = EXERCISES.filter((exercise) => exercise.baseLift === baseLift && exercise.reason.startsWith('Base lift'));
+      expect(rows.length, baseLift).toBe(1);
+      expect(rows[0].ratio, baseLift).toBe(1);
+      expect(rows[0].confidence, baseLift).toBe('high');
+    }
+  });
+
+  it('gives every row a written reason and a sane ratio', () => {
+    for (const { id, reason, ratio } of EXERCISES) {
+      expect(reason.length, id).toBeGreaterThan(10);
+      expect(ratio, id).toBeGreaterThan(0.05);
+      expect(ratio, id).toBeLessThan(2);
+    }
   });
 
   it('splits shoulders by name', () => {
@@ -117,6 +196,20 @@ describe('exercise bank', () => {
     expect(row('Dumbbell Shoulder Press').primaryMuscles).toEqual(['front-deltoids']);
     expect(row('Front Dumbbell Raise').primaryMuscles).toEqual(['front-deltoids']);
     expect(row('Side Lateral Raise').primaryMuscles).toEqual(['front-deltoids', 'back-deltoids']);
+  });
+
+  it('gives pulls the rear delts and pushes the front ones', () => {
+    expect(row('Bent Over Barbell Row').secondaryMuscles).toContain('back-deltoids');
+    expect(row('Bent Over Barbell Row').secondaryMuscles).not.toContain('front-deltoids');
+    expect(row('Wide-Grip Lat Pulldown').secondaryMuscles).not.toContain('front-deltoids');
+    expect(row('Dips - Chest Version').secondaryMuscles).not.toContain('back-deltoids');
+    expect(row('Cable Crossover').secondaryMuscles).not.toContain('back-deltoids');
+  });
+
+  it('corrects source data in the record', () => {
+    expect(row('Cable Hip Adduction').primaryMuscles).toEqual(['adductor']);
+    expect(row('Trap Bar Deadlift').equipment).toBe('barbell');
+    expect(row('Russian Twist').primaryMuscles).toEqual(['obliques']);
   });
 
   it('merges lats and middle back without repeating upper-back', () => {
@@ -144,7 +237,6 @@ describe('exercise bank', () => {
 
   it('leaves look-alike names alone', () => {
     expect(row('Dip Machine').equipment).toBe('machine');
-    expect(row('Jerk Dip Squat').equipment).toBe('barbell');
     expect(row('Lying Close-Grip Barbell Triceps Press To Chin').equipment).toBe('barbell');
   });
 });
@@ -243,13 +335,18 @@ describe('searchExercises', () => {
     ]);
   });
 
-  it('ranks strength above stretching even against a prefix match', () => {
-    for (const query of ['hamstring', 'shoulder', 'chest', 'triceps', 'lat']) {
-      const results = searchExercises(query, EXERCISES, EXERCISES.length);
-      const firstStretch = results.findIndex(isStretching);
-      expect(firstStretch, query).toBeGreaterThan(0);
-      expect(results.slice(firstStretch).every(isStretching), query).toBe(true);
-    }
+  it('AC3: tolerates typos', () => {
+    expect(firstName('Incline Dumbell Press')).toBe('Incline Dumbbell Press');
+    expect(firstName('Inclne Dumbbell Pres')).toBe('Incline Dumbbell Press');
+    expect(firstName('babrell curl')).toBe('Barbell Curl');
+    expect(firstName('deadlfit')).toBe('Barbell Deadlift');
+    expect(firstName('Lateral Rasie')).toBe('Side Lateral Raise');
+  });
+
+  it('leaves short words and aliases as typed, and still finds nothing for nonsense', () => {
+    expect(firstName('ohp')).toBe('Overhead Press');
+    expect(searchExercises('xqzv', EXERCISES)).toEqual([]);
+    expect(searchExercises('wobble', EXERCISES)).toEqual([]);
   });
 
   it('returns the first rows for an empty query', () => {
@@ -260,17 +357,67 @@ describe('searchExercises', () => {
   it('respects the limit', () => {
     expect(searchExercises('press', EXERCISES, 4)).toHaveLength(4);
   });
+});
 
-  it('searches whatever list it is given, so customs can be included', () => {
-    const custom: ExerciseDef = {
-      id: 'custom_1',
-      name: 'Bench',
-      group: 'Chest',
-      primaryMuscles: ['chest'],
-      secondaryMuscles: [],
-      equipment: 'other',
-    };
-    expect(searchExercises('bench', [...EXERCISES, custom])[0]).toBe(custom);
-    expect(searchExercises('zottman', [custom])).toEqual([]);
+describe('AC18: the build refuses bad rows', () => {
+  it('passes the bank as it stands', () => {
+    expect(() => validateRows(EXERCISES, BASE_LIFT_NAMES)).not.toThrow();
+  });
+
+  it.each(['id', 'name', 'group', 'primaryMuscles', 'secondaryMuscles', 'equipment', 'baseLift', 'ratio', 'confidence', 'reason'])(
+    'fails a row that lacks %s',
+    (field) => {
+      const { [field as keyof ExerciseDef]: _, ...row } = GOOD_ROW;
+      expect(() => validate(row)).toThrow(`lacks ${field}`);
+    },
+  );
+
+  it('fails an unknown base lift', () => {
+    expect(() => validate({ ...GOOD_ROW, baseLift: 'Power Clean' })).toThrow('unknown base lift "Power Clean"');
+  });
+
+  it.each([0, -0.5])('fails a ratio of %s', (ratio) => {
+    expect(() => validate({ ...GOOD_ROW, ratio })).toThrow('not positive');
+  });
+
+  it('fails a group that does not match the first primary muscle', () => {
+    expect(() => validate({ ...GOOD_ROW, group: 'Chest' })).toThrow('first primary muscle is quadriceps');
+  });
+
+  it('stops the script before it writes anything, naming the row', () => {
+    const source = join(mkdtempSync(join(tmpdir(), 'fitnotes-')), 'source.json');
+    writeFileSync(
+      source,
+      JSON.stringify([
+        {
+          id: 'Unknown_Lift',
+          name: 'Unknown Lift',
+          category: 'strength',
+          equipment: 'barbell',
+          primaryMuscles: ['chest'],
+          secondaryMuscles: [],
+        },
+      ]),
+    );
+    const output = join(REPO, 'src/data/exercises.json');
+    const before = readFileSync(output, 'utf8');
+    const run = spawnSync('node', [join(REPO, 'scripts/build-exercises.mjs'), source], { encoding: 'utf8' });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toMatch(/Unknown_Lift lacks baseLift|Catalogue rows with no exercise/);
+    expect(readFileSync(output, 'utf8')).toBe(before);
+  });
+});
+
+describe('AC24: the old table is gone', () => {
+  it('leaves no trace of its source', () => {
+    const banned = new RegExp(['strength', '[ -]?', 'level'].join(''), 'i');
+    for (const file of [...filesIn(join(REPO, 'src')), ...filesIn(join(REPO, 'scripts'))]) {
+      expect(banned.test(readFileSync(file, 'utf8')), file).toBe(false);
+    }
+  });
+
+  it('deleted the table and its fetch script', () => {
+    expect(existsSync(join(REPO, 'src/balance/standards.ts'))).toBe(false);
+    expect(existsSync(join(REPO, 'scripts/fetch-standards.mjs'))).toBe(false);
   });
 });

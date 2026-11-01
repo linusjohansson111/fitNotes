@@ -2,9 +2,9 @@ import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STANDARDS } from '../balance/standards';
+import { BASE_LIFTS, RAISES } from '../balance';
 import { EXERCISES } from '../data';
-import type { Equipment, Muscle } from '../domain/types';
+import type { Equipment, ExerciseDef, Muscle } from '../domain/types';
 import { e1rm } from '../model';
 
 const TODAY = '2026-06-15';
@@ -89,14 +89,18 @@ function weightForOneRepMax(target: number, equipment: Equipment): number {
   return (low + high) / 2;
 }
 
-/** Logs the first exercise of every counted lift so that its 1RM sits at `level`. */
+/** The 1RM at a level for an 80 kg lifter, between the 74 and 83 kg classes. */
+function kgAtLevel({ baseLift, ratio, group }: ExerciseDef, level: number): number {
+  const [low, high] = [BASE_LIFTS[baseLift][74][level], BASE_LIFTS[baseLift][83][level]];
+  return (low + ((high - low) * (BODYWEIGHT - 74)) / 9) * ratio * RAISES[group];
+}
+
+/** Logs one lift per base lift so that its 1RM sits at `level`. */
 async function logAllAtLevel(level: number) {
   await store.setBodyweight('2026-01-01', BODYWEIGHT);
-  for (const { exerciseIds, raise, standards } of STANDARDS) {
-    const [exerciseId] = exerciseIds;
-    const equipment = EXERCISES.find(({ id }) => id === exerciseId)?.equipment ?? 'other';
-    const weightKg = weightForOneRepMax(raise * standards[BODYWEIGHT][level], equipment);
-    await store.addEntry({ exerciseId, date: TODAY, weightKg, reps: 8 });
+  for (const exercise of EXERCISES.filter(({ reason }) => reason.startsWith('Base lift'))) {
+    const weightKg = weightForOneRepMax(kgAtLevel(exercise, level), exercise.equipment);
+    await store.addEntry({ exerciseId: exercise.id, date: TODAY, weightKg, reps: 8 });
   }
 }
 
@@ -109,7 +113,7 @@ describe('MapScreen', () => {
     expect(screen.queryByText('Lagging')).toBeNull();
   });
 
-  it.each([1, 2, 3])('AC15: with all counted lifts at level %i, every muscle with data is exactly yellow', async (level) => {
+  it.each([1, 2, 3])('AC15: with all logged lifts at level %i, every muscle with data is exactly yellow', async (level) => {
     await logAllAtLevel(level);
     const { container } = await open();
     const fills = fillsOnScreen(container);
@@ -153,7 +157,7 @@ describe('MapScreen', () => {
     const detail = screen.getByRole('region', { name: 'Chest' });
     expect(detail.textContent).toMatch(/(Beginner|Novice|Intermediate|Advanced|Elite) \d\.\d/);
     expect(detail.textContent).toMatch(/Your average \d\.\d/);
-    expect(detail.textContent).toMatch(/Bench Press\d+ kg/);
+    expect(detail.textContent).toMatch(/Barbell Bench Press - Medium Grip\d+ kg/);
   });
 
   it('AC15: tapping a muscle with no data says so in a line', async () => {
@@ -190,25 +194,27 @@ describe('MapScreen', () => {
     expect(fillsOnScreen(container).get('biceps')).toBe(GREY);
   });
 
-  it('AC16: a logged custom exercise leaves the map unchanged', async () => {
+  it('AC16: an exercise far from the base lifts counts on the map', async () => {
     await store.setBodyweight('2026-01-01', BODYWEIGHT);
-    await store.addEntry({ exerciseId: BENCH, date: TODAY, weightKg: 100, reps: 8 });
+    await store.addEntry({ exerciseId: 'Zottman_Curl', date: TODAY, weightKg: 12, reps: 8 });
     const { container } = await open();
-    const before = fillsOnScreen(container);
+    expect(fillsOnScreen(container).get('biceps')).toBe(YELLOW);
+    expect(fillsOnScreen(container).get('quadriceps')).toBe(GREY);
+  });
 
-    await act(async () => {
-      const custom = await store.saveCustomExercise({
-        id: '',
-        name: 'Odd lift',
-        group: 'Chest',
-        primaryMuscles: ['chest'],
-        secondaryMuscles: [],
-        equipment: 'machine',
-      });
-      await store.addEntry({ exerciseId: custom.id, date: TODAY, weightKg: 500, reps: 8 });
-    });
+  it('AC21: the incline dumbbell press alone colours chest, front delts and triceps', async () => {
+    await store.setBodyweight('2026-01-01', BODYWEIGHT);
+    await store.addEntry({ exerciseId: 'Incline_Dumbbell_Press', date: TODAY, weightKg: 30, reps: 8 });
+    const { container } = await open();
+    const yellow = [...fillsOnScreen(container)].filter(([, colour]) => colour !== GREY);
+    expect(yellow.map(([muscle]) => muscle).sort()).toEqual(['chest', 'front-deltoids', 'triceps']);
+    for (const [muscle, colour] of yellow) expect(colour, muscle).toBe(YELLOW);
+  });
 
-    expect(fillsOnScreen(container)).toEqual(before);
+  it('AC23: shows the attribution link, with data or without', async () => {
+    await open();
+    const link = screen.getByRole('link', { name: 'Powered by FitnessVolt' });
+    expect(link.getAttribute('href')).toBe('https://fitnessvolt.com/strength-standards/strength-data/');
   });
 
   describe('bodyweight', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Entry, ExerciseDef } from '../domain/types';
+import { EXERCISES } from '../data';
+import type { Entry } from '../domain/types';
 import type { AppData } from '../store';
 import { buildQueries } from './queries';
 
@@ -49,23 +50,21 @@ describe('buildQueries', () => {
     expect(after.predict(BENCH, '2026-03-03')).toEqual(buildQueries(data([kept])).predict(BENCH, '2026-03-03'));
   });
 
-  it('AC16: a custom exercise is predicted and leaves the muscle map unchanged', () => {
-    const custom: ExerciseDef & { updatedAt: number } = {
-      id: 'custom_1',
-      name: 'Odd Lift',
-      group: 'Chest',
-      primaryMuscles: ['chest'],
-      secondaryMuscles: [],
-      equipment: 'machine',
-      updatedAt: 1,
-    };
+  it('AC16: every exercise in the bank is predicted and counts on the map for each of its muscles', () => {
+    for (const { id, primaryMuscles, secondaryMuscles } of EXERCISES) {
+      const queries = buildQueries(data([entry(id, '2026-03-01', 40, 8)]));
+      expect(queries.predict(id, '2026-03-02')?.yellow, id).toBeTypeOf('number');
+      const balance = queries.muscleBalance('2026-03-02');
+      for (const muscle of [...primaryMuscles, ...secondaryMuscles]) expect(balance[muscle], id).toBe(0);
+    }
+  });
+
+  it('leaves an entry on a removed exercise out of the map, as Home leaves it out', () => {
     const bench = entry(BENCH, '2026-03-01', 80, 8);
     const without = buildQueries(data([bench]));
-    const withCustom = buildQueries(
-      data([bench, entry('custom_1', '2026-03-01', 500, 8)], { customExercises: [custom] }),
-    );
-    expect(withCustom.predict('custom_1', '2026-03-02')?.yellow).toBe(500);
-    expect(withCustom.muscleBalance('2026-03-02')).toEqual(without.muscleBalance('2026-03-02'));
+    const withOld = buildQueries(data([bench, entry('custom_1', '2026-03-01', 500, 8)]));
+    expect(withOld.muscleBalance('2026-03-02')).toEqual(without.muscleBalance('2026-03-02'));
+    expect(withOld.logged('2026-03-02')).toEqual(without.logged('2026-03-02'));
   });
 
   it('reports no bodyweight until one is recorded', () => {

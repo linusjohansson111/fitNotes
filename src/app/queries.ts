@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { type MuscleDetail, isCounted, muscleBalance, muscleDetail } from '../balance';
+import { type MuscleDetail, muscleBalance, muscleDetail } from '../balance';
 import { EXERCISES } from '../data';
 import type {
   Bodyweight,
   Entry,
   Exercise,
-  ExerciseDef,
   Group,
   ISODate,
   Muscle,
@@ -37,7 +36,6 @@ export interface LoggedGroup {
 }
 
 export interface Queries {
-  /** Custom exercises first, then the bank. */
   exercises: Exercise[];
   exercise(id: string): Exercise | undefined;
   /** Live entries for one exercise, newest first. */
@@ -70,22 +68,13 @@ export function buildQueries(data: AppData): Queries {
   for (const list of entriesById.values()) list.sort(newestFirst);
 
   const notes = new Map(data.notes.map((note) => [note.exerciseId, note.note]));
-  const toExercise = ({ id, name, group, primaryMuscles, secondaryMuscles, equipment }: ExerciseDef, custom: boolean): Exercise => ({
-    id,
-    name,
-    group,
-    primaryMuscles,
-    secondaryMuscles,
-    equipment,
-    colour: lastColour(entriesById.get(id) ?? []),
-    note: notes.get(id) ?? '',
-    custom,
-  });
-
-  const exercises = [
-    ...data.customExercises.map((def) => toExercise(def, true)),
-    ...EXERCISES.map((def) => toExercise(def, false)),
-  ];
+  const exercises = EXERCISES.map(
+    (def): Exercise => ({
+      ...def,
+      colour: lastColour(entriesById.get(def.id) ?? []),
+      note: notes.get(def.id) ?? '',
+    }),
+  );
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
 
   const inputFor = (exerciseId: string): ModelInput => ({
@@ -95,7 +84,7 @@ export function buildQueries(data: AppData): Queries {
   });
 
   const liftsOn = (date: ISODate) =>
-    [...entriesById.keys()].filter(isCounted).flatMap((exerciseId) => {
+    [...entriesById.keys()].flatMap((exerciseId) => {
       const oneRepMaxKg = oneRepMax(inputFor(exerciseId), date);
       return oneRepMaxKg === null ? [] : [{ exerciseId, oneRepMaxKg }];
     });

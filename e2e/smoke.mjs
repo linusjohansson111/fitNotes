@@ -200,11 +200,11 @@ async function run(browser) {
   check('AC13 the history lists both entries', (await page.locator('.ins-history li').count()) === 2);
   await shot(page, '4-second-entry');
 
-  // AC15: one counted lift can only be in proportion with itself.
+  // AC15: one lift can only be in proportion with itself.
   await page.getByLabel('Map', { exact: true }).click();
   await page.locator('svg polygon').first().waitFor();
   const oneLift = await muscleFills(page);
-  check('AC15 one counted lift is yellow and grey only', oneLift.every((fill) => fill === YELLOW || fill === GREY), oneLift.join(' '));
+  check('AC15 one lift is yellow and grey only', oneLift.every((fill) => fill === YELLOW || fill === GREY), oneLift.join(' '));
 
   await logNew(page, 'barbell squat', 'Barbell Squat', 180, 8, daysAgo(1));
   await page.getByLabel('Map', { exact: true }).click();
@@ -213,26 +213,26 @@ async function run(browser) {
   check('AC15 a stronger lift moves the map off yellow', twoLifts.some((fill) => fill !== YELLOW && fill !== GREY), twoLifts.join(' '));
   await shot(page, '5-map');
 
-  // AC3, AC16: a custom exercise is made from a name and tapped muscles, is predicted,
-  // and leaves the map unchanged.
+  // AC3, AC16: a misspelt search finds the lift, nothing offers to add one, and the
+  // lift counts on the map, which credits its data source.
   await page.getByLabel('Add exercise').click();
+  await page.getByLabel('Search exercises').fill('Incline Dumbell Press');
+  await page.waitForFunction(() => document.querySelector('.result-name')?.textContent === 'Incline Dumbbell Press');
+  check('AC3 a misspelling still ranks the lift first', true);
   await page.getByLabel('Search exercises').fill('Odd lift');
-  await page.getByRole('link', { name: 'Add “Odd lift” as a custom exercise' }).click();
-  await page.getByRole('button', { name: 'Machine', exact: true }).click();
-  const polygons = page.locator('.custom-map svg polygon');
-  for (let i = 0; i < (await polygons.count()) && !(await page.locator('button.save').isEnabled()); i++) {
-    await polygons.nth(i).click({ force: true });
-  }
-  check('AC3 tapping a muscle allows saving a custom exercise', await page.locator('button.save').isEnabled());
-  await shot(page, '5-custom');
-  await page.locator('button.save').click();
-  await page.locator('#log-weight').waitFor();
-  await logWith(page, 500, 8);
-  check('AC16 a custom exercise is predicted', /500[\s\S]*kg × 11/.test(await main(page)));
+  await until(() => page.locator('.result').count().then((count) => count === 0), 3_000);
+  check('AC3 search offers no way to add an exercise', (await page.locator('main a').count()) === 0);
+  await shot(page, '5-no-add');
+  await logNew(page, 'Incline Dumbell Press', 'Incline Dumbbell Press', 30, 8);
   await page.getByLabel('Map', { exact: true }).click();
   await page.locator('svg polygon').first().waitFor();
-  const withCustom = await muscleFills(page);
-  check('AC16 a custom exercise leaves the map unchanged', withCustom.join() === twoLifts.join(), withCustom.join(' '));
+  const withIncline = await muscleFills(page);
+  check('AC16 any exercise moves the map', withIncline.join() !== twoLifts.join(), withIncline.join(' '));
+  const attribution = page.getByRole('link', { name: 'Powered by FitnessVolt' });
+  check('AC23 the map credits FitnessVolt', (await attribution.getAttribute('href')) === 'https://fitnessvolt.com/strength-standards/strength-data/');
+  const figureBottom = (await page.locator('.ins-map-figure').boundingBox()).y + (await page.locator('.ins-map-figure').boundingBox()).height;
+  check('AC23 the link sits below the map', (await attribution.boundingBox()).y >= figureBottom);
+  await shot(page, '5-map-attribution');
 
   // AC12: a target out of reach shows as assistance.
   await logNew(page, 'pullups', 'Pullups', 0, 3);
@@ -253,7 +253,7 @@ async function run(browser) {
   const backedUp = await until(() => Promise.resolve(gh.snapshot?.entries.length === 5));
   check('AC2 reconnecting backs up without user action', backedUp, JSON.stringify(gh.snapshot)?.slice(0, 200));
   check('AC2 the bodyweight is in the backup', gh.snapshot?.bodyweights.length === 1);
-  check('AC2 the custom exercise is in the backup', gh.snapshot?.customExercises.length === 1);
+  check('AC2 the backup keeps its format', Array.isArray(gh.snapshot?.customExercises) && gh.snapshot?.version === 1);
   check('the token is not in the backup', !JSON.stringify(gh.snapshot).includes(TOKEN));
 
   // AC2: a fresh install restores every record.

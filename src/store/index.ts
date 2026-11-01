@@ -13,7 +13,6 @@ export {
   markClean,
   onLocalWrite,
   readAll,
-  saveCustomExercise,
   setBodyweight,
   setMeta,
   setNote,

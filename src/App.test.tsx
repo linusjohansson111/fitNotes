@@ -65,8 +65,6 @@ describe('AC1: the shell', () => {
     expect(await screen.findByLabelText('Bodyweight')).toBeTruthy();
     window.location.hash = '#/search';
     expect(await screen.findByRole('searchbox')).toBeTruthy();
-    window.location.hash = '#/custom/Odd%20Lift';
-    expect(((await screen.findByLabelText('Exercise name')) as HTMLInputElement).value).toBe('Odd Lift');
     window.location.hash = '#/';
     expect(await screen.findByText('Nothing logged yet.')).toBeTruthy();
   });

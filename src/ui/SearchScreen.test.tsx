@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CustomExercise, Muscle } from '../domain/types';
+import type { Muscle } from '../domain/types';
 import type { BodyMapProps } from './BodyMap';
 import { href } from './nav';
 import { SearchScreen } from './SearchScreen';
@@ -61,35 +61,20 @@ describe('AC3: search', () => {
     for (const muscle of bench.secondaryMuscles) expect(fills[muscle]).toBe('#636366');
   });
 
-  it('finds custom exercises too', async () => {
-    const user = userEvent.setup();
-    const custom: CustomExercise = {
-      id: 'custom_1',
-      name: 'Odd Lift',
-      group: 'Back',
-      primaryMuscles: ['upper-back'],
-      secondaryMuscles: [],
-      equipment: 'machine',
-      updatedAt: 1,
-    };
-    render(<SearchScreen queries={queriesFor([], { customExercises: [custom] })} />);
-    await user.type(input(), 'odd');
-    expect((await screen.findByRole('link', { name: 'Odd Lift' })).getAttribute('href')).toBe(
-      href({ name: 'log', exerciseId: 'custom_1' }),
-    );
-  });
-
-  it('offers the typed text as a custom exercise', async () => {
+  it('ranks the right lift first through a misspelling', async () => {
     const user = userEvent.setup();
     render(<SearchScreen queries={queriesFor([])} />);
-    await user.type(input(), 'Cable thing / left ');
-    const offer = await screen.findByRole('link', { name: 'Add “Cable thing / left” as a custom exercise' });
-    expect(offer.getAttribute('href')).toBe(href({ name: 'custom', initialName: 'Cable thing / left' }));
+    await user.type(input(), 'Incline Dumbell Press');
+    await waitFor(() => expect(screen.getAllByRole('listitem')[0].textContent).toBe('Incline Dumbbell Press'));
   });
 
-  it('offers a custom exercise before anything is typed', () => {
+  it('offers no way to add an exercise, whatever is typed', async () => {
+    const user = userEvent.setup();
     render(<SearchScreen queries={queriesFor([])} />);
-    expect(screen.getByRole('link', { name: 'Add a custom exercise' }).getAttribute('href')).toBe('#/custom');
+    await user.type(input(), 'Cable thing / left');
+    await waitFor(() => expect(screen.queryAllByRole('listitem')).toEqual([]));
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByText(/custom/i)).toBeNull();
   });
 });
 

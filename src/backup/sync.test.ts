@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CustomExercise, Entry, ExerciseDef } from '../domain/types';
+import type { CustomExercise, Entry } from '../domain/types';
 import { FakeGithub } from './fake-github';
 import type { BackupError, Snapshot } from './index';
 import { emptySnapshot } from './merge';
@@ -14,13 +14,14 @@ interface App {
 
 const WEEK_MS = 7 * 86_400_000;
 
-const CUSTOM: ExerciseDef = {
+const CUSTOM: CustomExercise = {
   id: 'custom-1',
   name: 'Bänkpress på lutande bänk',
   group: 'Chest',
   primaryMuscles: ['chest'],
   secondaryMuscles: ['triceps'],
   equipment: 'barbell',
+  updatedAt: 1,
 };
 
 const set = (date: string, weightKg = 80, reps = 8) => ({ exerciseId: 'bench', date, weightKg, reps });
@@ -201,7 +202,6 @@ describe('AC2: backup without user action', () => {
     goOffline();
     await app.store.addEntry(set('2026-10-01'));
     await app.store.setBodyweight('2026-10-01', 80);
-    await app.store.saveCustomExercise(CUSTOM);
     await app.store.setNote('bench', 'Elbows in');
     await advance(60_000);
     expect(gh.puts).toEqual([]);
@@ -214,7 +214,6 @@ describe('AC2: backup without user action', () => {
     expect(gh.snapshot).toMatchObject({
       entries: [set('2026-10-01')],
       bodyweights: [{ date: '2026-10-01', kg: 80 }],
-      customExercises: [{ id: CUSTOM.id, name: CUSTOM.name }],
       notes: [{ exerciseId: 'bench', note: 'Elbows in' }],
     });
     expect(app.store.isDirty()).toBe(false);
@@ -254,9 +253,12 @@ describe('AC2: restore on a fresh install', () => {
     await app.store.setBodyweight('2026-10-01', 80);
     await app.store.setBodyweight('2026-10-02', 81);
     await app.store.deleteBodyweight('2026-10-02');
-    const custom = await app.store.saveCustomExercise(CUSTOM);
+    await app.store.applySnapshot(
+      { entries: [], bodyweights: [], customExercises: [CUSTOM], notes: [] },
+      { dirty: true },
+    );
     await app.store.setNote('bench', 'Håll armbågarna nära');
-    return { kept, custom };
+    return { kept, custom: CUSTOM };
   }
 
   it('restores every record and respects tombstones', async () => {
@@ -286,6 +288,36 @@ describe('AC2: restore on a fresh install', () => {
     expect(app.store.isDirty()).toBe(false);
     expect(gh.puts).toEqual([]);
     expect(gh.text).toBe(remoteBefore);
+  });
+
+  it('AC25: reads an existing version 1 backup and restores every entry', async () => {
+    // As written by v1.0.0: a custom exercise, its entry, and a stretch since dropped.
+    const entries: Entry[] = [
+      { id: 'e1', exerciseId: 'Barbell_Bench_Press_-_Medium_Grip', date: '2026-10-01', weightKg: 80, reps: 8, updatedAt: 10 },
+      { id: 'e2', exerciseId: 'custom-1', date: '2026-10-02', weightKg: 40, reps: 10, updatedAt: 11 },
+      { id: 'e3', exerciseId: 'Hamstring_Stretch', date: '2026-10-03', weightKg: 5, reps: 12, updatedAt: 12 },
+      { id: 'e4', exerciseId: 'Barbell_Squat', date: '2026-10-04', weightKg: 100, reps: 5, updatedAt: 13, deleted: true },
+    ];
+    gh.commit(
+      JSON.stringify({
+        version: 1,
+        exportedAt: 14,
+        entries,
+        bodyweights: [{ date: '2026-10-01', kg: 80, updatedAt: 1 }],
+        customExercises: [CUSTOM],
+        notes: [{ exerciseId: 'custom-1', note: 'Håll armbågarna nära', updatedAt: 2 }],
+      }),
+    );
+
+    app = await freshInstall();
+    await app.backup.connectBackup(gh.token);
+
+    const all = await app.store.readAll();
+    expect(all.entries).toEqual(entries);
+    expect(all.customExercises).toEqual([CUSTOM]);
+    expect(app.store.getAppData()?.entries.map(({ id }) => id)).toEqual(['e1', 'e2', 'e3']);
+    expect(app.store.getAppData()?.bodyweights).toHaveLength(1);
+    expect(app.store.getAppData()?.notes).toHaveLength(1);
   });
 
   it('never marks the store dirty while restoring', async () => {

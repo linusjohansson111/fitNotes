@@ -1,5 +1,6 @@
-import type { Muscle } from '../domain/types';
-import { LEVEL_NAMES, STANDARDS, type LiftStandard } from './standards';
+import { EXERCISES } from '../data';
+import type { BaseLift, Confidence, ExerciseDef, Group, Muscle } from '../domain/types';
+import table from './baseLifts.json';
 
 /** Logged terms: per hand for dumbbells, total load for bodyweight exercises. */
 export interface LiftStrength {
@@ -23,6 +24,31 @@ export interface MuscleDetail {
     levelName: string;
   }[];
 }
+
+/** Bodyweight class in kg to 1RM at each level. Men's gym percentiles from FitnessVolt. */
+export const BASE_LIFTS = table.lifts as Record<BaseLift, Record<string, number[]>>;
+
+/** One level per percentile in the table: p10, p25, p50, p75 and p95. */
+export const LEVEL_NAMES = ['Beginner', 'Novice', 'Intermediate', 'Advanced', 'Elite'] as const;
+
+/**
+ * Judgement, not data: no published bodybuilder table was found. Raises what counts as
+ * in proportion for an exercise's group, so edit it to change the balance you aim for.
+ */
+export const RAISES: Record<Group, number> = {
+  Chest: 1,
+  Back: 1.1,
+  Shoulders: 1.15,
+  Arms: 1.1,
+  Legs: 1,
+  Core: 1,
+};
+
+/** A guess must not outvote a measured lift. */
+export const CONFIDENCE_WEIGHT: Record<Confidence, number> = { high: 1, medium: 0.75, low: 0.5 };
+
+const PRIMARY_WEIGHT = 1;
+const SECONDARY_WEIGHT = 0.5;
 
 const MUSCLES: Muscle[] = [
   'trapezius',
@@ -53,13 +79,11 @@ const YELLOW = [0xff, 0xd6, 0x0a];
 const GREEN = [0x30, 0xd1, 0x58];
 const GREY = '#3a3a3c';
 
-const STANDARD_BY_EXERCISE = new Map(
-  STANDARDS.flatMap((standard) => standard.exerciseIds.map((id) => [id, standard] as const)),
-);
+const ROW_BY_ID = new Map(EXERCISES.map((row) => [row.id, row]));
 
 interface Contribution {
   lift: LiftStrength;
-  standard: LiftStandard;
+  row: ExerciseDef;
   level: number;
   weight: number;
 }
@@ -73,21 +97,22 @@ function tidy(value: number): number {
   return Math.round(value * 1e9) / 1e9 + 0; // + 0 turns -0 into 0
 }
 
-function raisedStandards(standard: LiftStandard, bodyweightKg: number): number[] {
-  const bodyweights = Object.keys(standard.standards).map(Number);
+/** The base lift's levels at a bodyweight, held at the table's ends beyond them. */
+function baseLevels(baseLift: BaseLift, bodyweightKg: number): number[] {
+  const classes = BASE_LIFTS[baseLift];
+  const bodyweights = Object.keys(classes).map(Number);
   const kg = clamp(bodyweightKg, bodyweights[0], bodyweights[bodyweights.length - 1]);
   const upper = Math.max(1, bodyweights.findIndex((bodyweight) => bodyweight >= kg));
   const below = bodyweights[upper - 1];
   const above = bodyweights[upper];
   const share = (kg - below) / (above - below);
-  return standard.standards[below].map((low, level) => {
-    const high = standard.standards[above][level];
-    return standard.raise * (low + (high - low) * share);
-  });
+  return classes[below].map((low, level) => low + (classes[above][level] - low) * share);
 }
 
-function levelOf(standard: LiftStandard, oneRepMaxKg: number, bodyweightKg: number): number {
-  const kg = raisedStandards(standard, bodyweightKg);
+function levelOf(row: ExerciseDef, oneRepMaxKg: number, bodyweightKg: number): number {
+  const kg = baseLevels(row.baseLift, bodyweightKg).map(
+    (value) => value * row.ratio * RAISES[row.group],
+  );
   const above = kg.findIndex((value, level) => level > 0 && oneRepMaxKg <= value);
   // Past either end, the nearest step between levels carries on.
   const below = above === -1 ? kg.length - 2 : above - 1;
@@ -95,19 +120,25 @@ function levelOf(standard: LiftStandard, oneRepMaxKg: number, bodyweightKg: numb
   return tidy(clamp(level, MIN_LEVEL, MAX_LEVEL));
 }
 
-/** Lifts outside the table are ignored, so custom exercises leave the map unchanged. */
+/** Entries with no row, such as an old custom exercise, leave the map alone. */
 function contributionsByMuscle(
   lifts: LiftStrength[],
   bodyweightKg: number,
 ): Map<Muscle, Contribution[]> {
   const byMuscle = new Map<Muscle, Contribution[]>();
+  const add = (muscle: Muscle, contribution: Contribution) =>
+    byMuscle.set(muscle, [...(byMuscle.get(muscle) ?? []), contribution]);
+
   for (const lift of lifts) {
-    const standard = STANDARD_BY_EXERCISE.get(lift.exerciseId);
-    if (!standard) continue;
-    const level = levelOf(standard, lift.oneRepMaxKg, bodyweightKg);
-    for (const [muscle, weight] of Object.entries(standard.muscles) as [Muscle, number][]) {
-      const contribution = { lift, standard, level, weight };
-      byMuscle.set(muscle, [...(byMuscle.get(muscle) ?? []), contribution]);
+    const row = ROW_BY_ID.get(lift.exerciseId);
+    if (!row) continue;
+    const level = levelOf(row, lift.oneRepMaxKg, bodyweightKg);
+    const confidence = CONFIDENCE_WEIGHT[row.confidence];
+    for (const muscle of row.primaryMuscles) {
+      add(muscle, { lift, row, level, weight: PRIMARY_WEIGHT * confidence });
+    }
+    for (const muscle of row.secondaryMuscles) {
+      add(muscle, { lift, row, level, weight: SECONDARY_WEIGHT * confidence });
     }
   }
   return byMuscle;
@@ -161,18 +192,14 @@ export function muscleDetail(
     level,
     levelName: levelName(level),
     average,
-    lifts: contributions.map(({ lift, standard, level: liftLevel }) => ({
+    lifts: contributions.map(({ lift, row, level: liftLevel }) => ({
       exerciseId: lift.exerciseId,
-      name: standard.name,
+      name: row.name,
       oneRepMaxKg: lift.oneRepMaxKg,
       level: liftLevel,
       levelName: levelName(liftLevel),
     })),
   };
-}
-
-export function isCounted(exerciseId: string): boolean {
-  return STANDARD_BY_EXERCISE.has(exerciseId);
 }
 
 /** Continuous from red at -1 through yellow at 0 to green at +1; grey without data. */

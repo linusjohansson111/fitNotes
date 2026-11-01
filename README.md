@@ -39,11 +39,26 @@ The phone picks up a new version the next time the app is opened online.
 Backups go to `backup.json` in the private `fitnotes-data` repo. The repo must keep that
 name, and the app refuses to back up to it if it is ever made public.
 
+## Exercises
+
+`src/data/exercises.json` holds every exercise the app knows, one record per exercise:
+muscles, equipment, base lift, ratio, confidence and reason. Regenerate it with
+`node scripts/build-exercises.mjs`, which refuses to write a bad row. To change a row, edit
+`src/data/catalogue.json`, where ratios and corrections to the source data live, and
+`src/data/gaps.json` for lifts the source lacks.
+
 ## Muscle map
 
-A lift is only compared against your other lifts, so one counted lift always shows yellow,
-and the map needs at least two before colours differ. Tap a muscle to see its numbers.
-Only the lifts in `src/balance/standards.ts` count, and that table is yours to edit.
+Every logged lift counts, for each of its muscles. A lift is compared with your own average
+level, so one lift always shows yellow and the map needs at least two before colours
+differ. Tap a muscle to see its numbers.
+
+An exercise's level comes from its base lift's levels at your bodyweight, times its ratio
+and the raise for its group. `RAISES` in `src/balance/index.ts` is yours to edit. Base lift
+levels are men's gym percentiles from
+[FitnessVolt](https://fitnessvolt.com/strength-standards/strength-data/), CC BY 4.0, held in
+`src/balance/baseLifts.json`. Its class above 120 kg is left out, because its low
+percentiles fall below bodyweight on bodyweight lifts.
 
 ## Backup and restore
 

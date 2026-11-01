@@ -1,5 +1,4 @@
 import { type Queries, useQueries } from './app/queries';
-import { CustomScreen } from './ui/CustomScreen';
 import { ExerciseScreen } from './ui/ExerciseScreen';
 import { HomeScreen } from './ui/HomeScreen';
 import { LogScreen } from './ui/LogScreen';
@@ -17,8 +16,6 @@ function Screen({ route, queries }: { route: Route; queries: Queries }) {
       return <HomeScreen queries={queries} />;
     case 'search':
       return <SearchScreen queries={queries} />;
-    case 'custom':
-      return <CustomScreen initialName={route.initialName} />;
     case 'log':
       return <LogScreen queries={queries} exerciseId={route.exerciseId} entryId={route.entryId} />;
     case 'exercise':

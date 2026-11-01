@@ -11,6 +11,8 @@ import { MUSCLE_NAMES } from './insightMuscles';
 
 /** Fits two figures across a 390 px wide phone, inside the gutters. */
 const FIGURE_HEIGHT = 358;
+/** The base lifts' data is CC BY 4.0, and this link is its attribution. */
+const ATTRIBUTION_URL = 'https://fitnessvolt.com/strength-standards/strength-data/';
 
 function Legend() {
   return (
@@ -121,6 +123,9 @@ export function MapScreen() {
       {hasData ? <Legend /> : <p className="ins-hint">Log a lift like bench press or squat to fill the map.</p>}
       {selected && <Detail muscle={selected} detail={queries.muscleDetail(selected, date)} />}
       {queries.bodyweightKg(date) === null && <BodyweightInput date={date} />}
+      <a className="ins-attribution" href={ATTRIBUTION_URL} target="_blank" rel="noopener">
+        Powered by FitnessVolt
+      </a>
     </div>
   );
 }

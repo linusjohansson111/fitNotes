@@ -2,17 +2,19 @@ import 'fake-indexeddb/auto';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { forceCloseDatabase, IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExerciseDef } from '../domain/types';
+import type { CustomExercise } from '../domain/types';
 
 type Store = typeof import('./index');
 
-const PRESS: ExerciseDef = {
+/** An old custom exercise: only a restored backup can bring one in now. */
+const PRESS: CustomExercise = {
   id: 'custom-press',
   name: 'Landmine press',
   group: 'Shoulders',
   primaryMuscles: ['front-deltoids'],
   secondaryMuscles: ['triceps'],
   equipment: 'barbell',
+  updatedAt: 1,
 };
 
 /** A new module instance over the same database, as after closing and reopening the app. */
@@ -82,20 +84,6 @@ describe('actions', () => {
     expect(record.deleted).toBeUndefined();
   });
 
-  it('saves a custom exercise, storing only its definition', async () => {
-    const withExtras = { ...PRESS, colour: 'red', note: 'not part of the definition' };
-    const saved = await store.saveCustomExercise(withExtras);
-    expect(saved).toEqual({ ...PRESS, updatedAt: saved.updatedAt });
-
-    const edited = await store.saveCustomExercise({ ...PRESS, name: 'Viking press' });
-    expect(store.getAppData()?.customExercises).toEqual([edited]);
-  });
-
-  it('gives a custom exercise an id when it has none', async () => {
-    const saved = await store.saveCustomExercise({ ...PRESS, id: '' });
-    expect(saved.id).toMatch(/^[0-9a-f-]{36}$/);
-  });
-
   it('keeps one note per exercise', async () => {
     await store.setNote('bench', 'Elbows in');
     await store.setNote('bench', 'Pause at the chest');
@@ -105,7 +93,10 @@ describe('actions', () => {
   it('keeps data across a restart', async () => {
     const entry = await store.addEntry({ exerciseId: 'bench', date: '2026-10-01', weightKg: 80, reps: 8 });
     await store.setBodyweight('2026-10-01', 80);
-    await store.saveCustomExercise(PRESS);
+    await store.applySnapshot(
+      { entries: [], bodyweights: [], customExercises: [PRESS], notes: [] },
+      { dirty: false },
+    );
     await store.setNote('bench', 'Elbows in');
     const before = store.getAppData();
 
@@ -181,7 +172,6 @@ describe('dirty flag', () => {
       () => store.addEntry({ exerciseId: 'bench', date: '2026-10-01', weightKg: 80, reps: 8 }),
       () => store.setBodyweight('2026-10-01', 80),
       () => store.deleteBodyweight('2026-10-01'),
-      () => store.saveCustomExercise(PRESS),
       () => store.setNote('bench', 'Elbows in'),
     ];
     for (const write of writes) {
@@ -436,13 +426,11 @@ describe('AC1: offline', () => {
     await store.setBodyweight('2026-10-01', 80);
     await store.deleteBodyweight('2026-10-01');
     await store.setBodyweight('2026-10-02', 81);
-    await store.saveCustomExercise(PRESS);
     await store.setNote('bench', 'Elbows in');
 
     expect(store.getAppData()).toMatchObject({
       entries: [{ date: '2026-10-02', weightKg: 82 }],
       bodyweights: [{ date: '2026-10-02', kg: 81 }],
-      customExercises: [{ id: PRESS.id }],
       notes: [{ exerciseId: 'bench', note: 'Elbows in' }],
     });
     expect(fetchMock).not.toHaveBeenCalled();

@@ -65,7 +65,23 @@ export interface Bodyweight extends SyncMeta {
   kg: number;
 }
 
-/** The static definition: a bank row or a user's custom exercise. */
+/** The measured lifts every other exercise is compared with. */
+export type BaseLift =
+  | 'Back Squat'
+  | 'Bench Press'
+  | 'Deadlift'
+  | 'Front Squat'
+  | 'Sumo Deadlift'
+  | 'Incline Bench Press'
+  | 'Overhead Press'
+  | 'Dip'
+  | 'Chin-Up'
+  | 'Pull-Up'
+  | 'Pendlay Row';
+
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** One row of src/data/exercises.json. */
 export interface ExerciseDef {
   id: string;
   name: string;
@@ -73,16 +89,23 @@ export interface ExerciseDef {
   primaryMuscles: Muscle[];
   secondaryMuscles: Muscle[];
   equipment: Equipment;
+  baseLift: BaseLift;
+  /** This exercise's 1RM over the base lift's, in logged terms. */
+  ratio: number;
+  confidence: Confidence;
+  reason: string;
 }
 
 /** A definition merged with user state. `colour` is derived from the last entry. */
 export interface Exercise extends ExerciseDef {
   colour: Colour;
   note: string;
-  custom: boolean;
 }
 
-export interface CustomExercise extends ExerciseDef, SyncMeta {}
+/** Only kept so that existing backups still read: nothing creates these any more. */
+export interface CustomExercise
+  extends SyncMeta,
+    Pick<ExerciseDef, 'id' | 'name' | 'group' | 'primaryMuscles' | 'secondaryMuscles' | 'equipment'> {}
 
 export interface ExerciseNote extends SyncMeta {
   exerciseId: string;

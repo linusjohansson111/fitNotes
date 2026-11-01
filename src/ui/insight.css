@@ -104,6 +104,14 @@
   color: var(--muted);
   font-size: 15px;
 }
+.ins-attribution {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
 .ins-link {
   display: inline-flex;
   align-items: center;

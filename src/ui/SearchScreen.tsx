@@ -63,7 +63,6 @@ export function SearchScreen({ queries }: { queries: Queries }) {
     () => searchExercises(deferredQuery, queries.exercises, RESULT_LIMIT),
     [deferredQuery, queries.exercises],
   );
-  const typed = query.trim();
 
   return (
     <div className="screen">
@@ -82,9 +81,6 @@ export function SearchScreen({ queries }: { queries: Queries }) {
         onChange={(event) => setQuery(event.target.value)}
       />
       <Results results={results} />
-      <a className="quiet" href={href(typed ? { name: 'custom', initialName: typed } : { name: 'custom' })}>
-        {typed ? `Add “${typed}” as a custom exercise` : 'Add a custom exercise'}
-      </a>
     </div>
   );
 }

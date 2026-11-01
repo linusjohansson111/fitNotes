@@ -3,7 +3,6 @@ import type {
   Bodyweight,
   CustomExercise,
   Entry,
-  ExerciseDef,
   ExerciseNote,
   ISODate,
   SyncMeta,
@@ -213,22 +212,6 @@ export function setBodyweight(date: ISODate, kg: number): Promise<void> {
 
 export function deleteBodyweight(date: ISODate): Promise<void> {
   return localWrite(() => tombstone('bodyweights', date));
-}
-
-/** Creates or replaces a custom exercise. An empty `def.id` gets a new id. */
-export function saveCustomExercise(def: ExerciseDef): Promise<CustomExercise> {
-  return localWrite(() => {
-    const exercise: CustomExercise = {
-      id: def.id || crypto.randomUUID(),
-      name: def.name,
-      group: def.group,
-      primaryMuscles: def.primaryMuscles,
-      secondaryMuscles: def.secondaryMuscles,
-      equipment: def.equipment,
-      updatedAt: stamp(),
-    };
-    return { changes: { customExercises: [exercise] }, result: exercise };
-  });
 }
 
 export function setNote(exerciseId: string, note: string): Promise<void> {

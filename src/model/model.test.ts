@@ -206,11 +206,11 @@ describe('AC14: replay', () => {
   });
 });
 
-describe('AC16: custom exercises', () => {
-  it('needs no bank row, only the equipment and the entries', () => {
-    const bank = barbell(set(0, 80, 8), set(4, 85, 8));
-    const custom = barbell(...bank.entries.map((entry) => ({ ...entry, exerciseId: 'my-own-idea' })));
-    expect(predict(custom, on(4))).toEqual(predict(bank, on(4)));
+describe('AC16: any exercise', () => {
+  it('needs only the equipment and the entries', () => {
+    const one = barbell(set(0, 80, 8), set(4, 85, 8));
+    const other = barbell(...one.entries.map((entry) => ({ ...entry, exerciseId: 'another-lift' })));
+    expect(predict(other, on(4))).toEqual(predict(one, on(4)));
   });
 });
 

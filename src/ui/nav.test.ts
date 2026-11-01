@@ -5,10 +5,8 @@ describe('routes', () => {
   it.each<Route>([
     { name: 'home' },
     { name: 'search' },
-    { name: 'custom' },
-    { name: 'custom', initialName: 'Cable thing / left' },
     { name: 'log', exerciseId: 'Barbell_Bench_Press_-_Medium_Grip' },
-    { name: 'log', exerciseId: 'custom_1', entryId: 'abc' },
+    { name: 'log', exerciseId: 'Barbell_Squat', entryId: 'abc' },
     { name: 'exercise', exerciseId: 'Bench/Press' },
     { name: 'map' },
     { name: 'settings' },

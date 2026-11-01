@@ -4,7 +4,6 @@ import { flushSync } from 'react-dom';
 export type Route =
   | { name: 'home' }
   | { name: 'search' }
-  | { name: 'custom'; initialName?: string }
   | { name: 'log'; exerciseId: string; entryId?: string }
   | { name: 'exercise'; exerciseId: string }
   | { name: 'map' }
@@ -14,8 +13,6 @@ export function href(route: Route): string {
   switch (route.name) {
     case 'home':
       return '#/';
-    case 'custom':
-      return route.initialName ? `#/custom/${encodeURIComponent(route.initialName)}` : '#/custom';
     case 'log': {
       const base = `#/log/${encodeURIComponent(route.exerciseId)}`;
       return route.entryId ? `${base}/${encodeURIComponent(route.entryId)}` : base;
@@ -30,7 +27,6 @@ export function href(route: Route): string {
 export function parseRoute(hash: string): Route {
   const [name, first, second] = hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (name === 'search' || name === 'map' || name === 'settings') return { name };
-  if (name === 'custom') return first ? { name, initialName: first } : { name };
   if (name === 'log' && first) return second ? { name, exerciseId: first, entryId: second } : { name, exerciseId: first };
   if (name === 'exercise' && first) return { name, exerciseId: first };
   return { name: 'home' };
