@@ -48,6 +48,59 @@ const CARDIO_IDS = [
   'Trail_Running_Walking',
   'Walking_Treadmill',
 ];
+// Every row dropped in docs/catalogue-fixes.md.
+const DROPPED_IN_REVIEW = [
+  'Alternating_Hang_Clean',
+  'Bottoms-Up_Clean_From_The_Hang_Position',
+  'Double_Kettlebell_Alternating_Hang_Clean',
+  'Double_Kettlebell_Jerk',
+  'Double_Kettlebell_Snatch',
+  'Dumbbell_Clean',
+  'Kettlebell_Dead_Clean',
+  'Kettlebell_Hang_Clean',
+  'One-Arm_Kettlebell_Clean',
+  'One-Arm_Kettlebell_Clean_and_Jerk',
+  'One-Arm_Kettlebell_Jerk',
+  'One-Arm_Kettlebell_Snatch',
+  'One-Arm_Kettlebell_Split_Jerk',
+  'One-Arm_Kettlebell_Split_Snatch',
+  'One-Arm_Open_Palm_Kettlebell_Clean',
+  'Open_Palm_Kettlebell_Clean',
+  'Two-Arm_Kettlebell_Clean',
+  'Two-Arm_Kettlebell_Jerk',
+  'Speed_Squats',
+  'Speed_Box_Squat',
+  'Cable_Russian_Twists',
+  'One-Arm_Kettlebell_Push_Press',
+  'Double_Kettlebell_Push_Press',
+  'Kettlebell_Thruster',
+  'Landmine_Linear_Jammer',
+  'Single-Arm_Linear_Jammer',
+  'Kipping_Muscle_Up',
+  'One-Arm_Kettlebell_Swings',
+  'Kettlebell_Pirate_Ships',
+  'Landmine_180s',
+  'Spell_Caster',
+  'Wind_Sprints',
+  'Kettlebell_Sumo_High_Pull',
+  'Kettlebell_Figure_8',
+  'Kettlebell_Pass_Between_The_Legs',
+  'Lunge_Pass_Through',
+  'Cable_Judo_Flip',
+  'Rope_Climb',
+  'Spider_Crawl',
+  'Iron_Cross',
+];
+// Filed as Olympic in the source, but controlled lifts, so they stay.
+const KEPT_OLYMPIC_IDS = [
+  'Clean_Deadlift',
+  'Frankenstein_Squat',
+  'Olympic_Squat',
+  'Overhead_Squat',
+  'Romanian_Deadlift_from_Deficit',
+  'Snatch_Deadlift',
+  'Wide_Stance_Stiff_Legs',
+];
 
 const row = (name: string): ExerciseDef => {
   const found = EXERCISES.find((exercise) => exercise.name === name);
@@ -71,9 +124,9 @@ function filesIn(folder: string): string[] {
 }
 
 describe('exercise bank', () => {
-  it('holds about 585 rows (AC3)', () => {
-    expect(EXERCISES.length).toBeGreaterThan(550);
-    expect(EXERCISES.length).toBeLessThan(620);
+  it('holds about 535 rows (AC3)', () => {
+    expect(EXERCISES.length).toBeGreaterThan(520);
+    expect(EXERCISES.length).toBeLessThan(550);
   });
 
   it('has unique ids', () => {
@@ -127,7 +180,7 @@ describe('exercise bank', () => {
     for (const id of CARDIO_IDS) expect(ids.has(id), id).toBe(false);
   });
 
-  it('AC19: holds no stretching, plyometric, strongman, Olympic, band, ball or timed-hold row', () => {
+  it('AC19: holds no stretching, plyometric, strongman, dynamic, band, ball or timed-hold row', () => {
     const ids = new Set(EXERCISES.map(({ id }) => id));
     for (const id of [
       'Hamstring_Stretch',
@@ -145,6 +198,7 @@ describe('exercise bank', () => {
       'Plank',
       'Side_Bridge',
       'Sled_Row',
+      ...DROPPED_IN_REVIEW,
     ]) {
       expect(ids.has(id), id).toBe(false);
     }
@@ -159,12 +213,61 @@ describe('exercise bank', () => {
       'Dumbbell_Bicep_Curl',
       'Incline_Dumbbell_Press',
       'Seated_Cable_Rows',
+      'Clean_Deadlift',
+      'Overhead_Squat',
+      'Weighted_Crunches',
     ]) {
       expect(byId(id), id).toBeDefined();
     }
     for (const name of ['Trap Bar Deadlift', 'Front Plate Raise', 'Donkey Calf Raises']) {
       expect(names.has(name), name).toBe(true);
     }
+  });
+
+  it('keeps the rows the source files as Olympic behind the rows people log most', () => {
+    expect(
+      EXERCISES.slice(-KEPT_OLYMPIC_IDS.length)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(KEPT_OLYMPIC_IDS);
+  });
+
+  it('counts weighted crunches as bodyweight, though the source tags them medicine ball', () => {
+    expect(byId('Weighted_Crunches')?.equipment).toBe('bodyweight');
+  });
+
+  it('gives an overhead squat front delts only', () => {
+    const { secondaryMuscles } = byId('Overhead_Squat') as ExerciseDef;
+    expect(secondaryMuscles).toContain('front-deltoids');
+    expect(secondaryMuscles).not.toContain('back-deltoids');
+  });
+
+  it('files upright rows under Shoulders, delts first and traps second', () => {
+    for (const name of [
+      'Upright Barbell Row',
+      'Standing Dumbbell Upright Row',
+      'Smith Machine Upright Row',
+      'Upright Cable Row',
+    ]) {
+      expect(row(name).group, name).toBe('Shoulders');
+      expect(row(name).primaryMuscles, name).toEqual(['front-deltoids', 'back-deltoids']);
+      expect(row(name).secondaryMuscles, name).toContain('trapezius');
+    }
+  });
+
+  it('credits front delts only where a lift reaches forward or overhead', () => {
+    for (const name of [
+      'Incline Dumbbell Bench With Palms Facing In',
+      'Standing Overhead Barbell Triceps Extension',
+      'Ab Roller',
+      'Goblet Squat',
+      'Single Dumbbell Raise',
+    ]) {
+      const muscles = [...row(name).primaryMuscles, ...row(name).secondaryMuscles];
+      expect(muscles, name).toContain('front-deltoids');
+      expect(muscles, name).not.toContain('back-deltoids');
+    }
+    expect(row('Single Dumbbell Raise').primaryMuscles).toEqual(['front-deltoids']);
   });
 
   it('AC20: lists chest as a primary muscle of the chest lifts the source had wrong', () => {

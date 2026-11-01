@@ -42,10 +42,25 @@ const EQUIPMENT = {
   kettlebells: 'kettlebell',
 };
 
-// Search tie-breaks follow array order, so the rows people log most come first.
-const CATEGORY_ORDER = ['strength', 'powerlifting'];
-
 // The bank holds only lifts logged as kg × reps. Every other category goes whole.
+const KEPT_CATEGORIES = ['strength', 'powerlifting'];
+
+// Search tie-breaks follow array order, so the rows people log most come first.
+const CATEGORY_ORDER = [...KEPT_CATEGORIES, 'olympic weightlifting'];
+
+// Controlled lifts the rules below would drop: the source tags Weighted_Crunches
+// medicine ball and files the rest as Olympic.
+const KEPT_IDS = new Set([
+  'Weighted_Crunches',
+  'Romanian_Deadlift_from_Deficit',
+  'Wide_Stance_Stiff_Legs',
+  'Clean_Deadlift',
+  'Snatch_Deadlift',
+  'Olympic_Squat',
+  'Overhead_Squat',
+  'Frankenstein_Squat',
+]);
+
 const DROPPED_EQUIPMENT = new Set(['bands', 'medicine ball', 'exercise ball', 'foam roll']);
 const BAND_OR_BALL_NAME = /\bbands?\b|\bball\b/i;
 
@@ -57,6 +72,50 @@ const DROPPED_IDS = new Set([
   'Smith_Machine_Hang_Power_Clean',
   'Snatch_Pull',
   'Squat_Jerk',
+  // Cleans, snatches and jerks with any implement.
+  'Alternating_Hang_Clean',
+  'Bottoms-Up_Clean_From_The_Hang_Position',
+  'Double_Kettlebell_Alternating_Hang_Clean',
+  'Double_Kettlebell_Jerk',
+  'Double_Kettlebell_Snatch',
+  'Dumbbell_Clean',
+  'Kettlebell_Dead_Clean',
+  'Kettlebell_Hang_Clean',
+  'One-Arm_Kettlebell_Clean',
+  'One-Arm_Kettlebell_Clean_and_Jerk',
+  'One-Arm_Kettlebell_Jerk',
+  'One-Arm_Kettlebell_Snatch',
+  'One-Arm_Kettlebell_Split_Jerk',
+  'One-Arm_Kettlebell_Split_Snatch',
+  'One-Arm_Open_Palm_Kettlebell_Clean',
+  'Open_Palm_Kettlebell_Clean',
+  'Two-Arm_Kettlebell_Clean',
+  'Two-Arm_Kettlebell_Jerk',
+  // Speed work, or a band or ball in the source text.
+  'Speed_Squats',
+  'Speed_Box_Squat',
+  'Cable_Russian_Twists',
+  // Other dynamic lifts.
+  'One-Arm_Kettlebell_Push_Press',
+  'Double_Kettlebell_Push_Press',
+  'Kettlebell_Thruster',
+  'Landmine_Linear_Jammer',
+  'Single-Arm_Linear_Jammer',
+  'Kipping_Muscle_Up',
+  'One-Arm_Kettlebell_Swings',
+  'Kettlebell_Pirate_Ships',
+  'Landmine_180s',
+  'Spell_Caster',
+  'Wind_Sprints',
+  'Kettlebell_Sumo_High_Pull',
+  // Passes and movement drills.
+  'Kettlebell_Figure_8',
+  'Kettlebell_Pass_Between_The_Legs',
+  'Lunge_Pass_Through',
+  'Cable_Judo_Flip',
+  'Rope_Climb',
+  'Spider_Crawl',
+  'Iron_Cross',
   // Strongman: a sled's load is dragged, not lifted.
   'Sled_Overhead_Backward_Walk',
   'Sled_Overhead_Triceps_Extension',
@@ -82,16 +141,17 @@ const DROPPED_IDS = new Set([
 
 function isKept(row) {
   return (
-    CATEGORY_ORDER.includes(row.category) &&
-    !DROPPED_EQUIPMENT.has(row.equipment) &&
-    !BAND_OR_BALL_NAME.test(row.name) &&
-    !DROPPED_IDS.has(row.id)
+    KEPT_IDS.has(row.id) ||
+    (KEPT_CATEGORIES.includes(row.category) &&
+      !DROPPED_EQUIPMENT.has(row.equipment) &&
+      !BAND_OR_BALL_NAME.test(row.name) &&
+      !DROPPED_IDS.has(row.id))
   );
 }
 
 // Loaded by the lifter's own body whatever the source lists, so the model must add bodyweight.
 const BODYWEIGHT_NAME =
-  /pull[- ]?ups?\b|chin[- ]?ups?\b|\bchins?\b|\bdips?\b|push[- ]?ups?\b|muscle up|inverted row|suspended|\bbodyweight\b|rope climb|london bridges|back extensions|glute.?ham raise|parallel bars/i;
+  /pull[- ]?ups?\b|chin[- ]?ups?\b|\bchins?\b|\bdips?\b|push[- ]?ups?\b|muscle up|inverted row|suspended|\bbodyweight\b|london bridges|back extensions|glute.?ham raise|parallel bars/i;
 const NOT_BODYWEIGHT_NAME = /machine|to chin/i;
 
 // Rows and pulldowns pull the arm back; presses, dips, push-ups and flyes push it forward.
