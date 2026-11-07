@@ -1,6 +1,7 @@
 // Regenerates src/data/exercises.json from a pinned free-exercise-db commit (Unlicense),
 // the hand-written gap lifts in src/data/gaps.json, and src/data/catalogue.json, which
-// holds each exercise's base lift, ratio, confidence, reason and source corrections.
+// holds each exercise's base lift, ratio, confidence, reason, per-hand flag, share of
+// bodyweight, the mechanic of rows the source leaves untagged, and source corrections.
 // Run with: node scripts/build-exercises.mjs [local copy of the source file]
 
 import { readFile, writeFile } from 'node:fs/promises';
@@ -184,13 +185,28 @@ function toRow(row) {
   const secondaryMuscles = mapMuscles(row.secondaryMuscles, row.name).filter(
     (muscle) => !primaryMuscles.includes(muscle),
   );
-  return { id: row.id, name: row.name, primaryMuscles, secondaryMuscles, equipment: mapEquipment(row) };
+  return {
+    id: row.id,
+    name: row.name,
+    primaryMuscles,
+    secondaryMuscles,
+    equipment: mapEquipment(row),
+    mechanic: row.mechanic ?? undefined,
+  };
 }
 
-/** Adds the written assumptions, and lets corrections replace wrong source data. */
+/**
+ * Adds the written assumptions, and lets corrections replace wrong source data. A
+ * catalogue `mechanic` only fills a row the source leaves untagged.
+ */
 function complete(row, catalogue) {
-  const { baseLift, ratio, confidence, reason, corrections = {} } = catalogue.get(row.id) ?? {};
-  const { primaryMuscles, secondaryMuscles, equipment } = { ...row, ...corrections };
+  const entry = catalogue.get(row.id) ?? {};
+  const { baseLift, ratio, confidence, reason, perHand = false, bodyweightShare, corrections = {} } = entry;
+  const { primaryMuscles, secondaryMuscles, equipment, mechanic } = {
+    ...row,
+    mechanic: row.mechanic ?? entry.mechanic,
+    ...corrections,
+  };
   return {
     id: row.id,
     name: row.name,
@@ -198,6 +214,9 @@ function complete(row, catalogue) {
     primaryMuscles,
     secondaryMuscles: secondaryMuscles.filter((muscle) => !primaryMuscles.includes(muscle)),
     equipment,
+    mechanic,
+    perHand,
+    ...(bodyweightShare === undefined ? {} : { bodyweightShare }),
     baseLift,
     ratio,
     confidence,

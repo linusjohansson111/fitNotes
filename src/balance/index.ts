@@ -1,8 +1,8 @@
 import { EXERCISES } from '../data';
-import type { BaseLift, Confidence, ExerciseDef, Group, Muscle } from '../domain/types';
+import type { BaseLift, Confidence, ExerciseDef, Group, Mechanic, Muscle } from '../domain/types';
 import table from './baseLifts.json';
 
-/** Logged terms: per hand for dumbbells, total load for bodyweight exercises. */
+/** Logged terms: one hand for per-hand rows, share × bodyweight + added for bodyweight rows. */
 export interface LiftStrength {
   exerciseId: string;
   oneRepMaxKg: number;
@@ -47,8 +47,42 @@ export const RAISES: Record<Group, number> = {
 /** A guess must not outvote a measured lift. */
 export const CONFIDENCE_WEIGHT: Record<Confidence, number> = { high: 1, medium: 0.75, low: 0.5 };
 
+/** Compounds predict strength better than isolation lifts. */
+export const MECHANIC_WEIGHT: Record<Mechanic, number> = { compound: 1, isolation: 0.5 };
+
 const PRIMARY_WEIGHT = 1;
 const SECONDARY_WEIGHT = 0.5;
+
+/** The rows whose levels are measured. Every other row is derived from one of them. */
+export const BASE_ROWS: Record<BaseLift, string> = {
+  'Back Squat': 'Barbell_Squat',
+  'Bench Press': 'Barbell_Bench_Press_-_Medium_Grip',
+  Deadlift: 'Barbell_Deadlift',
+  'Front Squat': 'Front_Barbell_Squat',
+  'Sumo Deadlift': 'Sumo_Deadlift',
+  'Incline Bench Press': 'Barbell_Incline_Bench_Press_-_Medium_Grip',
+  'Overhead Press': 'gap_overhead_press',
+  Dip: 'Parallel_Bar_Dip',
+  'Chin-Up': 'Chin-Up',
+  'Pull-Up': 'Pullups',
+  'Pendlay Row': 'gap_pendlay_row',
+};
+
+/** Their level/median multiples set the spread of every derived row. */
+const WEIGHTED_SPREAD: BaseLift[] = [
+  'Back Squat',
+  'Bench Press',
+  'Deadlift',
+  'Front Squat',
+  'Sumo Deadlift',
+  'Incline Bench Press',
+  'Overhead Press',
+  'Pendlay Row',
+];
+const BODYWEIGHT_SPREAD: BaseLift[] = ['Dip', 'Chin-Up', 'Pull-Up'];
+
+/** The median, p50, among the levels. */
+const MEDIAN = 2;
 
 const MUSCLES: Muscle[] = [
   'trapezius',
@@ -109,10 +143,31 @@ function baseLevels(baseLift: BaseLift, bodyweightKg: number): number[] {
   return classes[below].map((low, level) => low + (classes[above][level] - low) * share);
 }
 
+/** Each level over the median, averaged over `lifts`. */
+function spread(lifts: BaseLift[], bodyweightKg: number): number[] {
+  const multiples = lifts.map((lift) => {
+    const levels = baseLevels(lift, bodyweightKg);
+    return levels.map((kg) => kg / levels[MEDIAN]);
+  });
+  return LEVEL_NAMES.map((_, level) => multiples.reduce((sum, own) => sum + own[level], 0) / multiples.length);
+}
+
+/**
+ * A row's kg at each level, raise included. Base rows keep their measured levels. A derived
+ * row's median is its base lift's times its ratio, and its other levels share one spread,
+ * so no base lift makes a muscle easier to score strong than another.
+ */
+export function rowLevels(row: ExerciseDef, bodyweightKg: number): number[] {
+  const base = baseLevels(row.baseLift, bodyweightKg);
+  const raise = row.ratio * RAISES[row.group];
+  if (BASE_ROWS[row.baseLift] === row.id) return base.map((kg) => kg * raise);
+  const median = base[MEDIAN] * raise;
+  const multiples = spread(row.equipment === 'bodyweight' ? BODYWEIGHT_SPREAD : WEIGHTED_SPREAD, bodyweightKg);
+  return multiples.map((multiple) => median * multiple);
+}
+
 function levelOf(row: ExerciseDef, oneRepMaxKg: number, bodyweightKg: number): number {
-  const kg = baseLevels(row.baseLift, bodyweightKg).map(
-    (value) => value * row.ratio * RAISES[row.group],
-  );
+  const kg = rowLevels(row, bodyweightKg);
   const above = kg.findIndex((value, level) => level > 0 && oneRepMaxKg <= value);
   // Past either end, the nearest step between levels carries on.
   const below = above === -1 ? kg.length - 2 : above - 1;
@@ -133,12 +188,12 @@ function contributionsByMuscle(
     const row = ROW_BY_ID.get(lift.exerciseId);
     if (!row) continue;
     const level = levelOf(row, lift.oneRepMaxKg, bodyweightKg);
-    const confidence = CONFIDENCE_WEIGHT[row.confidence];
+    const weight = CONFIDENCE_WEIGHT[row.confidence] * MECHANIC_WEIGHT[row.mechanic];
     for (const muscle of row.primaryMuscles) {
-      add(muscle, { lift, row, level, weight: PRIMARY_WEIGHT * confidence });
+      add(muscle, { lift, row, level, weight: PRIMARY_WEIGHT * weight });
     }
     for (const muscle of row.secondaryMuscles) {
-      add(muscle, { lift, row, level, weight: SECONDARY_WEIGHT * confidence });
+      add(muscle, { lift, row, level, weight: SECONDARY_WEIGHT * weight });
     }
   }
   return byMuscle;

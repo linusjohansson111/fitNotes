@@ -5,7 +5,8 @@
     "group": "Shoulders",
     "primaryMuscles": ["front-deltoids"],
     "secondaryMuscles": ["triceps", "trapezius"],
-    "equipment": "barbell"
+    "equipment": "barbell",
+    "mechanic": "compound"
   },
   {
     "id": "gap_bulgarian_split_squat",
@@ -13,7 +14,8 @@
     "group": "Legs",
     "primaryMuscles": ["quadriceps"],
     "secondaryMuscles": ["gluteal", "hamstring"],
-    "equipment": "dumbbell"
+    "equipment": "dumbbell",
+    "mechanic": "compound"
   },
   {
     "id": "gap_pec_deck",
@@ -21,7 +23,8 @@
     "group": "Chest",
     "primaryMuscles": ["chest"],
     "secondaryMuscles": ["front-deltoids"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "isolation"
   },
   {
     "id": "gap_assisted_pull_up_machine",
@@ -29,7 +32,8 @@
     "group": "Back",
     "primaryMuscles": ["upper-back"],
     "secondaryMuscles": ["biceps", "forearm"],
-    "equipment": "bodyweight"
+    "equipment": "bodyweight",
+    "mechanic": "compound"
   },
   {
     "id": "gap_assisted_dip_machine",
@@ -37,7 +41,8 @@
     "group": "Arms",
     "primaryMuscles": ["triceps"],
     "secondaryMuscles": ["chest", "front-deltoids"],
-    "equipment": "bodyweight"
+    "equipment": "bodyweight",
+    "mechanic": "compound"
   },
   {
     "id": "gap_machine_lateral_raise",
@@ -45,7 +50,8 @@
     "group": "Shoulders",
     "primaryMuscles": ["front-deltoids", "back-deltoids"],
     "secondaryMuscles": ["trapezius"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "isolation"
   },
   {
     "id": "gap_pendlay_row",
@@ -53,7 +59,8 @@
     "group": "Back",
     "primaryMuscles": ["upper-back"],
     "secondaryMuscles": ["biceps", "back-deltoids", "lower-back"],
-    "equipment": "barbell"
+    "equipment": "barbell",
+    "mechanic": "compound"
   },
   {
     "id": "gap_landmine_press",
@@ -61,7 +68,8 @@
     "group": "Shoulders",
     "primaryMuscles": ["front-deltoids"],
     "secondaryMuscles": ["triceps", "chest"],
-    "equipment": "barbell"
+    "equipment": "barbell",
+    "mechanic": "compound"
   },
   {
     "id": "gap_smith_machine_hip_thrust",
@@ -69,7 +77,8 @@
     "group": "Legs",
     "primaryMuscles": ["gluteal"],
     "secondaryMuscles": ["hamstring"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "compound"
   },
   {
     "id": "gap_smith_machine_lunge",
@@ -77,7 +86,8 @@
     "group": "Legs",
     "primaryMuscles": ["quadriceps"],
     "secondaryMuscles": ["gluteal", "hamstring"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "compound"
   },
   {
     "id": "gap_pendulum_squat",
@@ -85,7 +95,8 @@
     "group": "Legs",
     "primaryMuscles": ["quadriceps"],
     "secondaryMuscles": ["gluteal", "hamstring"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "compound"
   },
   {
     "id": "gap_belt_squat",
@@ -93,7 +104,8 @@
     "group": "Legs",
     "primaryMuscles": ["quadriceps"],
     "secondaryMuscles": ["gluteal", "hamstring", "adductor"],
-    "equipment": "machine"
+    "equipment": "machine",
+    "mechanic": "compound"
   },
   {
     "id": "gap_hanging_knee_raise",
@@ -101,6 +113,7 @@
     "group": "Core",
     "primaryMuscles": ["abs"],
     "secondaryMuscles": ["forearm"],
-    "equipment": "bodyweight"
+    "equipment": "bodyweight",
+    "mechanic": "isolation"
   }
 ]

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { TARGET_REPS } from '../domain/colour';
-import type { Equipment, Prediction } from '../domain/types';
+import type { Colour, Entry, Prediction } from '../domain/types';
 import { e1rm, weightFor } from './curve';
 import {
   DEFAULT_BODYWEIGHT_KG,
+  type ModelInput,
   lastColour,
   oneRepMax,
   predict,
@@ -11,12 +12,17 @@ import {
   roundToLoadable,
   strengthHistory,
 } from './index';
-import { carryOver, replay } from './replay';
 import { DAY_0, barbell, log, on, set, weighIn } from './testing';
 
-const raw = (input: ReturnType<typeof barbell>, day: number) => predictRaw(input, on(day)) as Prediction;
-const shown = (input: ReturnType<typeof barbell>, day: number) => predict(input, on(day)) as Prediction;
-const dropPercent = (from: number, to: number) => (100 * (from - to)) / from;
+const raw = (input: ModelInput, day: number) => predictRaw(input, on(day)) as Prediction;
+const shown = (input: ModelInput, day: number) => predict(input, on(day)) as Prediction;
+/** The e1RM a predicted weight stands for, so moves compare on the fitted scale. */
+const strength = (input: ModelInput, day: number, colour: Colour) => e1rm(raw(input, day)[colour], TARGET_REPS[colour]);
+
+/** `count` sessions of `weight` x 8, three days apart from day 0. */
+function flat(count: number, weight = 100): Entry[] {
+  return Array.from({ length: count }, (_, i) => set(i * 3, weight, 8));
+}
 
 describe('no entries', () => {
   it('predicts nothing', () => {
@@ -54,21 +60,41 @@ describe('AC7: first entry', () => {
 });
 
 describe('AC8: own colour moves most', () => {
-  it('holds on a beat in each colour', () => {
+  /** Each colour's move in e1RM terms, the model's own scale. */
+  function moves(base: Entry[], entry: Entry): Record<Colour, number> {
+    const day = Math.round((Date.parse(entry.date) - Date.parse(DAY_0)) / 86_400_000);
+    const move = (colour: Colour) =>
+      Math.log(strength(barbell(...base, entry), day, colour) / strength(barbell(...base), day, colour));
+    return { red: move('red'), yellow: move('yellow'), green: move('green') };
+  }
+  const colourOf = (entry: Entry): Colour => (entry.reps <= 6 ? 'red' : entry.reps <= 9 ? 'yellow' : 'green');
+
+  it('moves a new colour most, and the others partly', () => {
     const base = [set(0, 80, 8), set(3, 80, 8)];
-    for (const entry of [set(7, 95, 5), set(7, 86, 8), set(7, 76, 11)]) {
-      const before = raw(barbell(...base), 7);
-      const after = raw(barbell(...base, entry), 7);
-      const colour = entry.reps === 5 ? 'red' : entry.reps === 8 ? 'yellow' : 'green';
-      const moves = {
-        red: Math.log(after.red / before.red),
-        yellow: Math.log(after.yellow / before.yellow),
-        green: Math.log(after.green / before.green),
-      };
+    for (const entry of [set(7, 95, 5), set(7, 76, 11)]) {
+      const move = moves(base, entry);
       for (const other of ['red', 'yellow', 'green'] as const) {
-        if (other === colour) continue;
-        expect(moves[other]).toBeGreaterThan(0);
-        expect(moves[other]).toBeLessThanOrEqual(0.9 * moves[colour] + 1e-9);
+        if (other === colourOf(entry)) continue;
+        expect(move[other]).toBeGreaterThan(0);
+        expect(move[other]).toBeLessThan(move[colourOf(entry)]);
+      }
+    }
+  });
+
+  it('moves every colour alike while only one colour has data', () => {
+    const move = moves([set(0, 80, 8), set(3, 80, 8)], set(7, 86, 8));
+    expect(move.yellow).toBeGreaterThan(0);
+    expect(move.red).toBeCloseTo(move.yellow, 12);
+    expect(move.green).toBeCloseTo(move.yellow, 12);
+  });
+
+  it('moves its own colour most when every colour has data', () => {
+    const base = [set(0, 80, 8), set(3, 88, 5), set(6, 73.5, 11), set(9, 80, 8), set(12, 88, 5), set(15, 73.5, 11)];
+    for (const entry of [set(18, 84, 8), set(18, 92, 5), set(18, 77, 11), set(18, 76, 8), set(18, 70, 11)]) {
+      const move = moves(base, entry);
+      for (const other of ['red', 'yellow', 'green'] as const) {
+        if (other === colourOf(entry)) continue;
+        expect(Math.abs(move[other])).toBeLessThan(Math.abs(move[colourOf(entry)]));
       }
     }
   });
@@ -82,81 +108,32 @@ describe('AC9: target reps stay fixed', () => {
   });
 });
 
-describe('AC10: misses count less than beats', () => {
-  const base = [set(0, 100, 8), set(3, 100, 8)];
-  const percentMove = (before: number, after: number) => (100 * (after - before)) / before;
+describe('AC10: above and below the trend count alike', () => {
+  const base = [set(0, 100, 8), set(3, 102, 8), set(6, 101, 8), set(9, 104, 8), set(12, 103, 8)];
 
-  it.each([1.5, 3, 5, 8, 12])('a %f%% miss after a layoff still lowers the prediction', (x) => {
-    const start = raw(barbell(...base), 63).yellow;
-    const after = raw(barbell(...base, set(63, start * (1 - x / 100), 8)), 63).yellow;
-    expect(after).toBeLessThan(start);
-  });
-
-  it.each([1.5, 3, 5, 8, 12])('at %f%%', (x) => {
-    const start = raw(barbell(...base), 6).yellow;
-    const beat = raw(barbell(...base, set(6, start * (1 + x / 100), 8)), 6).yellow;
-
-    const firstMissSet = set(6, start * (1 - x / 100), 8);
-    const afterFirst = raw(barbell(...base, firstMissSet), 9).yellow;
-    const secondMissSet = set(9, afterFirst * (1 - x / 100), 8);
-    const afterSecond = raw(barbell(...base, firstMissSet, secondMissSet), 9).yellow;
-
-    const firstDrop = -percentMove(start, afterFirst);
-    const secondDrop = -percentMove(afterFirst, afterSecond);
-    expect(firstDrop).toBeGreaterThan(0);
-    expect(firstDrop).toBeLessThan(percentMove(start, beat));
-    expect(secondDrop).toBeGreaterThan(firstDrop);
-  });
-
-  it('responds to a 1st, 2nd and later miss in a row by 0.1, 0.4 and 0.7', () => {
-    const misses = [set(6, 80, 8), set(9, 80, 8), set(12, 80, 8), set(15, 80, 8)];
-    const strength = (count: number) =>
-      replay(barbell(...base, ...misses.slice(0, count)), on(15)).state!.strength.yellow;
-    const response = (count: number) =>
-      Math.log(strength(count) / strength(count - 1)) / Math.log(e1rm(80, 8) / strength(count - 1));
-    expect(response(1)).toBeCloseTo(0.1, 6);
-    expect(response(2)).toBeCloseTo(0.4, 6);
-    expect(response(3)).toBeCloseTo(0.7, 6);
-    expect(response(4)).toBeCloseTo(0.7, 6);
-  });
-
-  it('ends the streak on a record', () => {
-    const entries = [...base, set(6, 90, 8), set(9, 90, 8), set(12, 120, 8), set(15, 100, 8)];
-    expect(replay(barbell(...entries), on(15)).state?.missStreak).toBe(1);
+  it.each([1, 3, 8, 20])('moves the next prediction equal and opposite at %f%%', (percent) => {
+    const onTrend = strength(barbell(...base), 15, 'yellow');
+    const landing = (sign: number) => {
+      const weight = weightFor(onTrend * Math.exp((sign * percent) / 100), 8);
+      return strength(barbell(...base, set(15, weight, 8)), 15, 'yellow');
+    };
+    const unmoved = landing(0);
+    const up = Math.log(landing(1) / unmoved);
+    const down = Math.log(landing(-1) / unmoved);
+    expect(up).toBeGreaterThan(0);
+    expect(down).toBeCloseTo(-up, 10);
   });
 });
 
-describe('AC11: time away', () => {
-  const settled = barbell(set(0, 100, 8), set(3, 100, 8), set(7, 100, 8));
-
+describe('AC11: sessions, not calendar time', () => {
   it.each([
-    ['one entry', barbell(set(7, 100, 8))],
-    ['a short log', settled],
-  ])('%s', (_, input) => {
-    const start = raw(input, 7);
-    const day14 = raw(input, 21);
-    const day60 = raw(input, 67);
-
-    expect(dropPercent(start.red, day14.red)).toBeGreaterThan(0);
-    expect(dropPercent(start.red, day14.red)).toBeLessThanOrEqual(1);
-    expect(day60.red).toBeLessThan(day14.red);
-    expect(day60.green).toBeLessThan(day14.green);
-    expect(dropPercent(start.green, day60.green)).toBeGreaterThan(dropPercent(start.red, day60.red));
-  });
-
-  it('adds no drag on a normal weekly cadence, and calendar days add no growth', () => {
-    const start = raw(settled, 7);
-    expect(raw(settled, 14)).toEqual(start);
-  });
-
-  it('has green fall first and furthest at every horizon', () => {
-    const start = raw(settled, 7);
-    for (const days of [8, 14, 30, 60, 120, 365, 1000]) {
-      const later = raw(settled, 7 + days);
-      const drop = (colour: 'red' | 'yellow' | 'green') => dropPercent(start[colour], later[colour]);
-      expect(drop('green')).toBeGreaterThan(drop('yellow'));
-      expect(drop('yellow')).toBeGreaterThan(drop('red'));
-    }
+    ['one entry', [set(0, 100, 8)]],
+    ['a log', [set(0, 100, 8), set(3, 104, 5), set(7, 90, 11)]],
+  ])('predicts the same 60 days on as the day after, for %s', (_, entries) => {
+    const input = barbell(...entries);
+    const last = Math.max(...entries.map((entry) => Math.round((Date.parse(entry.date) - Date.parse(DAY_0)) / 86_400_000)));
+    expect(raw(input, last + 60)).toEqual(raw(input, last + 1));
+    expect(shown(input, last + 60)).toEqual(shown(input, last + 1));
   });
 });
 
@@ -180,9 +157,39 @@ describe('AC12: assistance', () => {
   });
 });
 
+describe('bodyweight share', () => {
+  it('loads share × bodyweight + added', () => {
+    const pushUps = log('bodyweight', [set(0, 10, 5)], [weighIn(0, 80)], { bodyweightShare: 0.65 });
+    expect(oneRepMax(pushUps, DAY_0)).toBeCloseTo(e1rm(0.65 * 80 + 10, 5), 6);
+  });
+
+  it('AC32: suggests less added weight for a share under 1 at the same reps', () => {
+    const at = (share: number) =>
+      raw(log('bodyweight', [set(0, 0, 20)], [weighIn(0, 80)], { bodyweightShare: share }), 0).red;
+    expect(at(0.65)).toBeLessThan(at(1));
+    expect(at(0.65)).toBeGreaterThan(0);
+  });
+
+  it('keeps assistance from reaching the share of bodyweight', () => {
+    const rows = log('bodyweight', [set(0, -40, 3)], [weighIn(0, 80)], { bodyweightShare: 0.6 });
+    expect(shown(rows, 0).green).toBeGreaterThan(-48);
+  });
+});
+
+describe('per hand', () => {
+  it('doubles the load for the curve and halves it back for the map', () => {
+    const pair = log('dumbbell', [set(0, 20, 8)], [], { perHand: true });
+    const single = log('dumbbell', [set(0, 20, 8)], [], { perHand: false });
+    expect(oneRepMax(pair, DAY_0)).toBeCloseTo(e1rm(40, 8) / 2, 6);
+    expect(oneRepMax(single, DAY_0)).toBeCloseTo(e1rm(20, 8), 6);
+    expect(raw(pair, 0).yellow).toBeCloseTo(20, 6);
+    expect(raw(pair, 0).red).not.toBeCloseTo(raw(single, 0).red, 2);
+  });
+});
+
 describe('AC14: replay', () => {
   const entries = [set(0, 80, 8), set(4, 85, 5), set(9, 70, 11), set(13, 82.5, 8)];
-  const outputs = (input: ReturnType<typeof barbell>) => ({
+  const outputs = (input: ModelInput) => ({
     predicted: predict(input, on(20)),
     raw: predictRaw(input, on(20)),
     history: strengthHistory(input, on(20)),
@@ -207,30 +214,86 @@ describe('AC14: replay', () => {
 });
 
 describe('AC16: any exercise', () => {
-  it('needs only the equipment and the entries', () => {
+  it('needs only the loading and the entries', () => {
     const one = barbell(set(0, 80, 8), set(4, 85, 8));
     const other = barbell(...one.entries.map((entry) => ({ ...entry, exerciseId: 'another-lift' })));
     expect(predict(other, on(4))).toEqual(predict(one, on(4)));
   });
 });
 
+describe('AC26: a run of sessions under or over', () => {
+  /** Logs `count` sessions after `entries`, each `factor` times the yellow prediction before it. */
+  function run(entries: Entry[], factor: number, count = 6): { before: number; after: number } {
+    const log = [...entries];
+    let day = 3 * entries.length;
+    const before = raw(barbell(...log), day).yellow;
+    for (let i = 0; i < count; i++) {
+      log.push(set(day, raw(barbell(...log), day).yellow * factor, 8));
+      day += 3;
+    }
+    return { before, after: raw(barbell(...log), day).yellow };
+  }
+  const rising = Array.from({ length: 12 }, (_, i) => set(i * 3, 80 * Math.exp(0.005 * i), 8));
+
+  it.each([
+    ['a flat log', flat(6)],
+    ['a log rising 0.5% a session', rising],
+  ])('predicts lower after six sessions 2%% under, on %s', (_, entries) => {
+    const { before, after } = run(entries, 0.98);
+    expect(after).toBeLessThan(before);
+  });
+
+  it.each([
+    ['a flat log', flat(6)],
+    ['a log rising 0.5% a session', rising],
+  ])('predicts higher after six sessions 2%% over, on %s', (_, entries) => {
+    const { before, after } = run(entries, 1.02);
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it('lowers the prediction after one low day', () => {
+    const before = raw(barbell(...flat(4)), 12).yellow;
+    expect(raw(barbell(...flat(4), set(12, 99, 8)), 12).yellow).toBeLessThan(before);
+  });
+});
+
+describe('AC27: K starts at 0%', () => {
+  it('predicts the same e1RM after two equal sessions', () => {
+    const first = e1rm(80, 8);
+    const twoEqual = barbell(set(0, 80, 8), set(3, weightFor(first, 6), 6));
+    for (const colour of ['red', 'yellow', 'green'] as const) {
+      expect(strength(twoEqual, 3, colour)).toBeCloseTo(first, 8);
+    }
+  });
+
+  it('lets data replace it within about three sessions', () => {
+    const k = (count: number) => {
+      const growing = barbell(...Array.from({ length: count }, (_, i) => set(i * 3, 100 * 1.02 ** i, 8)));
+      const [first, second] = strengthHistory(growing, on(count * 3)).lines.yellow.map((point) => e1rm(point.kg, 8));
+      return Math.log(second / first);
+    };
+    expect(k(2)).toBeLessThan(0.5 * Math.log(1.02));
+    expect(k(3)).toBeGreaterThan(0.6 * Math.log(1.02));
+    expect(k(6)).toBeGreaterThan(0.85 * Math.log(1.02));
+  });
+});
+
+describe('AC28: an outlier only adjusts the fit', () => {
+  it('raises the next prediction part of the way to it', () => {
+    const before = raw(barbell(...flat(8)), 24).yellow;
+    const after = raw(barbell(...flat(8), set(24, 130, 8)), 24).yellow;
+    expect(after).toBeGreaterThan(before);
+    expect(after).toBeLessThan(130);
+  });
+
+  it('lets later sessions undo it', () => {
+    const outlier = [...flat(8), set(24, 130, 8)];
+    const recovered = [...outlier, set(27, 100, 8), set(30, 100, 8), set(33, 100, 8)];
+    expect(raw(barbell(...recovered), 33).yellow).toBeLessThan(raw(barbell(...outlier), 24).yellow);
+  });
+});
+
 describe('entry updates', () => {
-  it('counts a record fully', () => {
-    const before = raw(barbell(set(0, 80, 8)), 3).yellow;
-    const after = raw(barbell(set(0, 80, 8), set(3, 90, 8)), 3).yellow;
-    expect(before).toBeCloseTo(80, 6);
-    expect(after).toBeGreaterThanOrEqual(90);
-    expect(after).toBeLessThan(91);
-  });
-
-  it('carries a beat into the other colours by the prior share', () => {
-    const before = raw(barbell(set(0, 80, 8)), 7);
-    const after = raw(barbell(set(0, 80, 8), set(7, 76, 11)), 7);
-    expect(after.yellow).toBeGreaterThan(before.yellow);
-    expect(after.red).toBeGreaterThan(before.red);
-    expect(after.yellow / before.yellow).toBeGreaterThan(after.red / before.red);
-  });
-
   it('lets only the stronger of two same-date entries feed the model', () => {
     const base = [set(0, 80, 8)];
     const strong = set(4, 85, 8);
@@ -240,177 +303,68 @@ describe('entry updates', () => {
       expect(predictRaw(barbell(...base, weak, strong), on(4))).toEqual(justStrong);
     }
   });
-});
 
-describe('trap: the rounding band', () => {
-  // Learned step 5, with raw yellow above the shown 80 kg.
-  const base = [set(0, 70, 8), set(3, 80, 8), set(6, 85, 5)];
-  const yellow = (entries: typeof base) => raw(barbell(...entries), 9).yellow;
-
-  it('sets up a shown weight below raw', () => {
-    expect(yellow(base)).toBeGreaterThan(80.5);
-    expect(shown(barbell(...base), 9).yellow).toBe(80);
-  });
-
-  it('counts the shown weight at target reps as a hit', () => {
-    const hit = [...base, set(9, 80, 8)];
-    expect(replay(barbell(...hit), on(9)).state?.outcome).toBe('hit');
-    expect(yellow(hit)).toBeGreaterThanOrEqual(yellow(base));
-  });
-
-  it('resets the miss streak inside the band', () => {
-    const missed = [...base, set(9, 70, 8)];
-    expect(replay(barbell(...missed), on(9)).state?.missStreak).toBe(1);
-    const hitNext = [...missed, set(12, 80, 8)];
-    expect(replay(barbell(...hitNext), on(12)).state?.missStreak).toBe(0);
-  });
-
-  it('counts a set below the shown weight as a miss', () => {
-    const miss = [...base, set(9, 75, 8)];
-    expect(replay(barbell(...miss), on(9)).state?.outcome).toBe('miss');
-    expect(yellow(miss)).toBeLessThan(yellow(base));
-  });
-
-  it.each(['barbell', 'dumbbell', 'kettlebell', 'machine'] as Equipment[])(
-    'never registers a miss when a %s user follows the app exactly',
-    (equipment) => {
-      for (const reps of [5, 8, 11]) {
-        const colour = reps === 5 ? 'red' : reps === 8 ? 'yellow' : 'green';
-        const entries = [set(0, 40, reps)];
-        const shownWeights: number[] = [];
-        const rawWeights: number[] = [];
-        for (let session = 1; session <= 80; session++) {
-          const day = Math.round(session * 3.5);
-          const input = log(equipment, entries);
-          const weight = (predict(input, on(day)) as Prediction)[colour];
-          shownWeights.push(weight);
-          rawWeights.push((predictRaw(input, on(day)) as Prediction)[colour]);
-          entries.push(set(day, weight, reps));
-        }
-        const outcomes = replay(log(equipment, entries), on(400)).timeline.map((point) => point.outcome);
-        expect(outcomes).not.toContain('miss');
-        expect(rawWeights.every((weight, i) => i === 0 || weight > rawWeights[i - 1])).toBe(true);
-        expect(shownWeights.at(-1)).toBeGreaterThan(40);
-      }
-    },
-  );
-});
-
-describe('trap: growth on a miss', () => {
-  it('lowers the prediction after even a small first miss', () => {
-    const base = [set(0, 100, 8), set(3, 100, 8), set(6, 100, 8)];
-    const before = raw(barbell(...base), 9).yellow;
-    const after = raw(barbell(...base, set(9, 99, 8)), 9).yellow;
-    expect(after).toBeLessThan(before);
-  });
-});
-
-describe('growth', () => {
-  it('floors at zero on a falling log', () => {
-    const falling = barbell(set(0, 100, 8), set(4, 95, 8), set(8, 90, 8), set(12, 85, 8), set(16, 80, 8));
-    const before = raw(falling, 16).yellow;
-    const afterHit = raw(barbell(...falling.entries, set(20, before, 8)), 20).yellow;
-    expect(afterHit).toBeGreaterThanOrEqual(before);
-  });
-
-  it('learns a faster rate from faster raw progress', () => {
-    const steps = 12;
-    const climbing = (gain: number) => {
-      const entries = [];
-      for (let i = 0; i < steps; i++) entries.push(set(i * 4, 100 * (1 + gain) ** i, 8));
-      return barbell(...entries);
-    };
-    const hit = (input: ReturnType<typeof barbell>) => {
-      const day = steps * 4;
-      const before = raw(input, day).yellow;
-      return raw(barbell(...input.entries, set(day, before, 8)), day).yellow / before;
-    };
-    expect(hit(climbing(0.02))).toBeGreaterThan(hit(climbing(0.002)));
-  });
-
-  it('does not age through a layoff', () => {
-    const gap = (days: number) => {
-      const entries = [set(0, 100, 8), set(4, 100, 8), set(8, 100, 8), set(8 + days, 100, 8)];
-      return replay(barbell(...entries), on(8 + days)).state?.trainingAge;
-    };
-    expect(gap(14)).toBe(gap(200));
-  });
-});
-
-describe('carry-over learning', () => {
-  it('starts from the prior', () => {
-    const state = replay(barbell(set(0, 80, 8)), DAY_0).state!;
-    expect(carryOver(state, 'yellow', 'red')).toBe(0.5);
-    expect(carryOver(state, 'yellow', 'green')).toBe(0.5);
-    expect(carryOver(state, 'red', 'green')).toBe(0.25);
-    expect(carryOver(state, 'green', 'red')).toBe(0.25);
-  });
-
-  const alternate = (red: (session: number) => number) => {
-    const entries = [];
-    for (let i = 0; i < 40; i++) {
-      entries.push(set(i * 7, 80 * 1.012 ** i, 8));
-      entries.push(set(i * 7 + 3, red(i), 5));
-    }
-    return replay(barbell(...entries), on(400)).state!;
-  };
-
-  it('falls when a colour ignores movement in another', () => {
-    expect(carryOver(alternate(() => 80), 'yellow', 'red')).toBeLessThan(0.5);
-  });
-
-  it('rises when a colour follows movement in another', () => {
-    const following = alternate((i) => 88 * 1.012 ** i);
-    expect(carryOver(following, 'yellow', 'red')).toBeGreaterThan(0.5);
-    expect(carryOver(following, 'yellow', 'red')).toBeLessThanOrEqual(0.9);
-  });
-});
-
-describe('rebound', () => {
-  const trained = [set(0, 100, 8), set(4, 100, 8), set(8, 100, 8), set(12, 100, 8)];
-
-  it('returns lost strength faster than growth alone would', () => {
-    const decayed = raw(barbell(...trained), 112).yellow;
-    const afterHit = raw(barbell(...trained, set(112, decayed, 8)), 112).yellow;
-    expect(afterHit / decayed).toBeGreaterThan(1.02);
-  });
-
-  it('repays the debt faster on a beat', () => {
-    const debtAfter = (weight: number) =>
-      replay(barbell(...trained, set(112, weight, 8)), on(112)).state!.debt.yellow;
-    const decayed = raw(barbell(...trained), 112).yellow;
-    expect(debtAfter(decayed * 1.05)).toBeLessThan(debtAfter(decayed));
-  });
-
-  it('owes nothing for a shortfall', () => {
-    const state = replay(barbell(...trained, set(16, 70, 8)), on(16)).state!;
-    expect(state.debt).toEqual({ red: 0, yellow: 0, green: 0 });
+  it('carries a session into colours not trained', () => {
+    const before = raw(barbell(set(0, 80, 8)), 7);
+    const after = raw(barbell(set(0, 80, 8), set(7, 76, 11)), 7);
+    expect(after.yellow).toBeGreaterThan(before.yellow);
+    expect(after.red).toBeGreaterThan(before.red);
   });
 });
 
 describe('colour order', () => {
   it('survives an outlier', () => {
     const { red, yellow, green } = raw(barbell(set(0, 90, 5), set(4, 100, 11)), 4);
-    expect(green).toBeGreaterThanOrEqual(100);
     expect(red).toBeGreaterThanOrEqual(yellow);
     expect(yellow).toBeGreaterThanOrEqual(green);
+  });
+});
+
+describe('AC29: real weights', () => {
+  const press = (entries: Entry[], rackWeights: number[] = []) =>
+    shown(log('dumbbell', entries, [], { perHand: true, rackWeights }), 7);
+
+  it('shows only grid or logged dumbbell weights, never 39.5 or 33.5', () => {
+    const shownWeights = Object.values(press([set(0, 40, 4), set(3, 37.5, 8)], [22, 26]));
+    for (const weight of shownWeights) {
+      expect([39.5, 33.5]).not.toContain(weight);
+      expect(weight % 2.5 === 0 || [22, 26, 40, 37.5].includes(weight)).toBe(true);
+    }
+  });
+
+  it('snaps to a dumbbell logged on another exercise', () => {
+    const entries = [set(0, 22, 6)];
+    const near = raw(log('dumbbell', entries, [], { perHand: true }), 7).yellow;
+    const offGrid = Math.round(near * 10) / 10 + 0.05;
+    expect(offGrid % 2.5).not.toBe(0);
+    expect(press(entries, [offGrid]).yellow).toBe(offGrid);
+    expect(press(entries).yellow % 2.5).toBe(0);
   });
 });
 
 describe('strengthHistory', () => {
   const input = barbell(set(0, 80, 8), set(4, 90, 4), set(4, 50, 12), set(60, 70, 11));
 
-  it('has a point per session date and a final decayed point', () => {
+  it('draws the current fit at each session date, ending at asOf on the next suggestion', () => {
     const { lines } = strengthHistory(input, on(120));
     for (const colour of ['red', 'yellow', 'green'] as const) {
       expect(lines[colour].map((point) => point.date)).toEqual([on(0), on(4), on(60), on(120)]);
-      expect(lines[colour][3].kg).toBeLessThan(lines[colour][2].kg);
       expect(lines[colour][3].kg).toBeCloseTo((predictRaw(input, on(120)) as Prediction)[colour], 8);
     }
   });
 
-  it('adds no extra point when asOf is the last session', () => {
-    expect(strengthHistory(input, on(60)).lines.red).toHaveLength(3);
+  it('ends on the next suggestion when asOf is the last session', () => {
+    const { lines } = strengthHistory(input, on(60));
+    expect(lines.red.map((point) => point.date)).toEqual([on(0), on(4), on(60)]);
+    expect(lines.red[2].kg).toBeCloseTo((predictRaw(input, on(60)) as Prediction).red, 8);
+  });
+
+  it('draws a straight trend in log terms, its slope K', () => {
+    const growing = barbell(...Array.from({ length: 6 }, (_, i) => set(i * 3, 100 * 1.02 ** i, 8)));
+    const kg = strengthHistory(growing, on(18)).lines.yellow.map((point) => e1rm(point.kg, 8));
+    const steps = kg.slice(1).map((value, i) => Math.log(value / kg[i]));
+    for (const step of steps) expect(step).toBeCloseTo(steps[0], 8);
+    expect(steps[0]).toBeGreaterThan(0);
   });
 
   it('has a dot per live entry, normalised to target reps, including same-date sets', () => {
@@ -428,7 +382,7 @@ describe('strengthHistory', () => {
   });
 
   it('reports logged terms', () => {
-    const dumbbell = strengthHistory(log('dumbbell', [set(0, 20, 8)]), on(0));
+    const dumbbell = strengthHistory(log('dumbbell', [set(0, 20, 8)], [], { perHand: true }), on(0));
     expect(dumbbell.lines.yellow[0].kg).toBeCloseTo(20, 6);
     expect(dumbbell.dots[0].kg).toBeCloseTo(20, 6);
 
@@ -448,17 +402,12 @@ describe('strengthHistory', () => {
 describe('oneRepMax', () => {
   it('uses logged terms', () => {
     expect(oneRepMax(barbell(set(0, 80, 8)), DAY_0)).toBeCloseTo(e1rm(80, 8), 6);
-    expect(oneRepMax(log('dumbbell', [set(0, 20, 8)]), DAY_0)).toBeCloseTo(e1rm(40, 8) / 2, 6);
-    expect(oneRepMax(log('bodyweight', [set(0, 10, 5)], [weighIn(0, 75)]), DAY_0)).toBeCloseTo(
-      e1rm(85, 5),
-      6,
-    );
+    expect(oneRepMax(log('bodyweight', [set(0, 10, 5)], [weighIn(0, 75)]), DAY_0)).toBeCloseTo(e1rm(85, 5), 6);
   });
 
   it('takes the current colour', () => {
     const input = barbell(set(0, 80, 8), set(4, 90, 8), set(8, 40, 12));
-    const state = replay(input, on(8)).state!;
-    expect(oneRepMax(input, on(8))).toBeCloseTo(state.strength.green, 6);
+    expect(oneRepMax(input, on(8))).toBeCloseTo(strength(input, 8, 'green'), 6);
   });
 });
 

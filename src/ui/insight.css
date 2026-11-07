@@ -5,22 +5,17 @@
   min-width: 0;
   max-width: 100%;
 }
-.ins-body .rbh-wrapper {
+.ins-figure {
+  display: block;
   flex: 1 1 0;
   min-width: 0;
   aspect-ratio: 1 / 2;
-}
-.ins-body .rbh {
-  display: block;
 }
 /* A transparent stroke closes the gaps between muscles and widens small ones for a finger. */
 .ins-body--tap polygon {
   stroke: transparent;
   stroke-width: 5;
-}
-/* The library's two soleus polygons run past its viewBox, so they are cut into stubs. */
-.ins-body .rbh-wrapper:last-child polygon:nth-last-child(-n + 2) {
-  display: none;
+  cursor: pointer;
 }
 
 /* Strength graph */

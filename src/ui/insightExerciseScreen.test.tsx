@@ -142,13 +142,14 @@ describe('ExerciseScreen', () => {
 
     await act(() => store.addEntry({ exerciseId: BENCH, date: addDays(TODAY, -7), weightKg: 60, reps: 8 }));
     expect(container.querySelector('path.ins-lead')?.getAttribute('d')).not.toBe(before);
+    const redBefore = weight(container, 'red');
 
-    await act(() => store.updateEntry(entry.id, { weightKg: 100, reps: 4 }));
+    await act(() => store.updateEntry(entry.id, { weightKg: 120, reps: 4 }));
 
-    expect(weight(container, 'red')).toBeGreaterThan(90);
+    expect(weight(container, 'red')).toBeGreaterThan(redBefore);
     expect(container.querySelector('.ins-weight--now')?.getAttribute('data-colour')).toBe('red');
-    expect(screen.getByText('Last 100 kg × 4 · today')).toBeTruthy();
-    expect(historyRows()[0].textContent).toContain('100 kg × 4');
+    expect(screen.getByText('Last 120 kg × 4 · today')).toBeTruthy();
+    expect(historyRows()[0].textContent).toContain('120 kg × 4');
     expect(screen.getByRole('link', { name: 'Log' }).className).toContain('ins-red');
   });
 

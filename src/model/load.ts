@@ -4,15 +4,14 @@ export const DEFAULT_BODYWEIGHT_KG = 80;
 
 const MIN_LOAD_KG = 0.5;
 
-const DEFAULT_STEP_KG: Record<Equipment, number> = {
-  barbell: 2.5,
-  dumbbell: 2,
-  machine: 2.5,
-  cable: 2.5,
-  kettlebell: 4,
-  bodyweight: 2.5,
-  other: 2.5,
-};
+/** How a logged weight becomes the load the curve sees. */
+export interface Loading {
+  equipment: Equipment;
+  /** Two dumbbells or two cable handles, logged per hand. */
+  perHand: boolean;
+  /** Bodyweight rows: the share of bodyweight a rep moves. */
+  bodyweightShare: number;
+}
 
 /** Latest live record on or before `date`, else the earliest, else the default. */
 export function bodyweightOn(bodyweights: Bodyweight[], date: ISODate): number {
@@ -22,48 +21,40 @@ export function bodyweightOn(bodyweights: Bodyweight[], date: ISODate): number {
   return live.findLast((record) => record.date <= date)?.kg ?? live[0]?.kg ?? DEFAULT_BODYWEIGHT_KG;
 }
 
-/** What the curve sees. Dumbbells count both hands because it is unrealistic at low loads. */
-export function effectiveLoad(equipment: Equipment, weightKg: number, bodyweightKg: number): number {
-  if (equipment === 'dumbbell') return Math.max(2 * weightKg, MIN_LOAD_KG);
-  if (equipment === 'bodyweight') return Math.max(bodyweightKg + weightKg, MIN_LOAD_KG);
-  return Math.max(weightKg, MIN_LOAD_KG);
+/** What the curve sees: both hands for per-hand rows, share × bodyweight + added for bodyweight rows. */
+export function effectiveLoad(loading: Loading, weightKg: number, bodyweightKg: number): number {
+  if (loading.equipment === 'bodyweight') return Math.max(loading.bodyweightShare * bodyweightKg + weightKg, MIN_LOAD_KG);
+  return Math.max(loading.perHand ? 2 * weightKg : weightKg, MIN_LOAD_KG);
 }
 
 /** The inverse of `effectiveLoad`. */
-export function loggedWeight(equipment: Equipment, load: number, bodyweightKg: number): number {
-  if (equipment === 'dumbbell') return load / 2;
-  if (equipment === 'bodyweight') return load - bodyweightKg;
-  return load;
+export function loggedWeight(loading: Loading, load: number, bodyweightKg: number): number {
+  if (loading.equipment === 'bodyweight') return load - loading.bodyweightShare * bodyweightKg;
+  return loading.perHand ? load / 2 : load;
 }
 
-function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b);
+/** A logged weight must be above this, or it leaves no load at all. */
+export function noLoadWeight(loading: Loading, bodyweightKg: number): number {
+  return loading.equipment === 'bodyweight' ? -loading.bodyweightShare * bodyweightKg : 0;
 }
 
-/** GCD of logged differences on a 0.25 kg grid, once 3 distinct weights exist. */
-export function loadableStep(equipment: Equipment, loggedWeights: number[]): number {
-  const quarters = [...new Set(loggedWeights.map((weight) => Math.round(weight * 4)))];
-  if (quarters.length < 3) return DEFAULT_STEP_KG[equipment];
-  const learned = quarters.reduce((step, quarter) => gcd(step, Math.abs(quarter - quarters[0])), 0) / 4;
-  // Sparse jumps like 60/80/100 say little, so a coarse step needs more weights behind it.
-  return learned > 5 && quarters.length < 5 ? DEFAULT_STEP_KG[equipment] : learned;
+/** The step of the grid real weights sit on, from zero. The log form steps by it too. */
+export function gridStep(equipment: Equipment): number {
+  return equipment === 'kettlebell' ? 4 : 2.5;
 }
 
 /**
- * Nearest loadable weight. Snaps relative to the latest of `loggedWeights`, so offset
- * stacks like 7.5/12.5/17.5 work. Never returns a weight that would leave no load:
- * zero or less, or assistance that reaches bodyweight.
+ * The nearest real weight: a point on the grid from zero, or a weight already logged,
+ * always above `floor`. Ties go to the lighter weight.
  */
-export function roundToLoadable(
-  kg: number,
-  equipment: Equipment,
-  loggedWeights: number[],
-  bodyweightKg: number = DEFAULT_BODYWEIGHT_KG,
-): number {
-  const step = loadableStep(equipment, loggedWeights);
-  const anchor = loggedWeights.at(-1) ?? 0;
-  const rounded = anchor + Math.round((kg - anchor) / step) * step;
-  const noLoadAt = equipment === 'bodyweight' ? -bodyweightKg : 0;
-  const lowest = anchor + (Math.floor((noLoadAt - anchor) / step) + 1) * step;
-  return Math.max(rounded, lowest);
+export function roundToLoadable(kg: number, equipment: Equipment, realWeights: number[], floor = 0): number {
+  const step = gridStep(equipment);
+  const below = Math.floor(kg / step) * step;
+  const lowestOnGrid = (Math.floor(floor / step) + 1) * step;
+  const candidates = [below, below + step, lowestOnGrid, ...realWeights].filter((weight) => weight > floor);
+  const best = candidates.reduce((nearest, weight) => {
+    const [distance, nearestDistance] = [Math.abs(weight - kg), Math.abs(nearest - kg)];
+    return distance < nearestDistance || (distance === nearestDistance && weight < nearest) ? weight : nearest;
+  });
+  return best + 0; // + 0 turns -0 into 0
 }

@@ -41,7 +41,7 @@ async function open() {
   return view;
 }
 
-/** A polygon's `points` for each muscle, read from the library's own click. */
+/** A polygon's `points` for each muscle, read from its click. */
 function polygonsByMuscle(): Map<Muscle, string[]> {
   const found = new Map<Muscle, string[]>();
   const onMuscle = vi.fn<(muscle: Muscle) => void>();

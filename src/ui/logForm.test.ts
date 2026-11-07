@@ -17,8 +17,8 @@ import {
 const TODAY = '2026-03-10';
 const PREDICTION: Prediction = { red: 90, yellow: 80, green: 70 };
 const LATER: Prediction = { red: 85, yellow: 75, green: 65 };
-const BARBELL: LogFormContext = { equipment: 'barbell', bodyweightKg: null, today: TODAY };
-const BODYWEIGHT: LogFormContext = { equipment: 'bodyweight', bodyweightKg: 80, today: TODAY };
+const BARBELL: LogFormContext = { equipment: 'barbell', bodyweightShare: 1, bodyweightKg: null, today: TODAY };
+const BODYWEIGHT: LogFormContext = { equipment: 'bodyweight', bodyweightShare: 1, bodyweightKg: 80, today: TODAY };
 
 const COLOUR_OF_REPS: Record<number, Colour> = {
   3: 'red',
@@ -251,31 +251,32 @@ describe('weight', () => {
     expect(run(blank, { type: 'stepWeight', delta: -2.5, floor: 0 })).toBe(blank);
   });
 
-  it('knows the floor per equipment', () => {
-    expect(weightFloor('barbell', 80)).toBe(0);
-    expect(weightFloor('dumbbell', null)).toBe(0);
-    expect(weightFloor('bodyweight', 80)).toBe(-80);
-    expect(weightFloor('bodyweight', null)).toBe(Number.NEGATIVE_INFINITY);
+  it('knows the floor per equipment and share of bodyweight', () => {
+    expect(weightFloor(BARBELL, 80)).toBe(0);
+    expect(weightFloor({ equipment: 'dumbbell', bodyweightShare: 1 }, null)).toBe(0);
+    expect(weightFloor(BODYWEIGHT, 80)).toBe(-80);
+    expect(weightFloor({ equipment: 'bodyweight', bodyweightShare: 0.65 }, 80)).toBeCloseTo(-52, 10);
+    expect(weightFloor(BODYWEIGHT, null)).toBe(Number.NEGATIVE_INFINITY);
   });
 });
 
-describe('AC12: assistance', () => {
-  it('flips the sign with the toggle, both ways, as an edit', () => {
-    const on = run(opened('yellow', null), { type: 'weight', text: '12,5' }, { type: 'flipSign' });
-    expect(on.weightText).toBe('−12,5');
-    expect(isAssistance(on)).toBe(true);
-    expect(submission(on, BODYWEIGHT)?.weightKg).toBe(-12.5);
-    const off = run(on, { type: 'flipSign' });
-    expect(off.weightText).toBe('12,5');
-    expect(isAssistance(off)).toBe(false);
+describe('AC12, AC31: one signed input', () => {
+  it.each([
+    ['−12,5', -12.5],
+    ['-12.5', -12.5],
+    ['12,5', 12.5],
+    ['+5', 5],
+  ])('takes %s as %f kg', (text, kg) => {
+    const state = run(opened('yellow', null), { type: 'weight', text });
+    expect(submission(state, BODYWEIGHT)?.weightKg).toBe(kg);
+    expect(isAssistance(state)).toBe(kg < 0);
   });
 
-  it('holds the sign on a blank field until digits are typed', () => {
-    const state = run(opened('yellow', null), { type: 'flipSign' });
-    expect(state.weightText).toBe('−');
-    expect(state.weightEdited).toBe(true);
+  it('holds a lone minus until digits are typed', () => {
+    const state = run(opened('yellow', null), { type: 'weight', text: '-' });
+    expect(isAssistance(state)).toBe(true);
     expect(submission(state, BODYWEIGHT)).toBeNull();
-    expect(submission(run(state, { type: 'weight', text: '−20' }), BODYWEIGHT)?.weightKg).toBe(-20);
+    expect(submission(run(state, { type: 'weight', text: '-20' }), BODYWEIGHT)?.weightKg).toBe(-20);
   });
 
   it('steps down through zero into assistance', () => {
@@ -298,9 +299,6 @@ describe('AC12: assistance', () => {
     expect(isAssistance(state)).toBe(false);
   });
 
-  it('flips a predicted weight', () => {
-    expect(run(opened('red', { red: -2.5, yellow: -10, green: -15 }), { type: 'flipSign' }).weightText).toBe('2.5');
-  });
 });
 
 describe('editing an entry', () => {
@@ -370,14 +368,17 @@ describe('submission', () => {
       expect(submission(run(opened('yellow', null), { type: 'weight', text: '0' }), BODYWEIGHT)?.weightKg).toBe(0);
     });
 
-    it('turns a sign flipped on zero into plain zero', () => {
-      const state = run(opened('yellow', null), { type: 'weight', text: '0' }, { type: 'flipSign' });
+    it('turns a typed minus zero into plain zero', () => {
+      const state = run(opened('yellow', null), { type: 'weight', text: '−0' });
       expect(Object.is(submission(state, BODYWEIGHT)?.weightKg, 0)).toBe(true);
     });
 
-    it('refuses assistance that reaches bodyweight', () => {
+    it('refuses assistance that reaches the share of bodyweight moved', () => {
       expect(submission(run(opened('yellow', null), { type: 'weight', text: '−80' }), BODYWEIGHT)).toBeNull();
       expect(submission(run(opened('yellow', null), { type: 'weight', text: '−79' }), BODYWEIGHT)?.weightKg).toBe(-79);
+      const pushUps = { ...BODYWEIGHT, bodyweightShare: 0.65 };
+      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−52' }), pushUps)).toBeNull();
+      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−51' }), pushUps)?.weightKg).toBe(-51);
     });
 
     describe('with no bodyweight recorded', () => {

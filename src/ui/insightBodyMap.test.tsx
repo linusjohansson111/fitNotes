@@ -1,31 +1,16 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Muscle } from '../domain/types';
-import { BodyMap, highlightFor } from './BodyMap';
+import { BodyMap, sameMap } from './BodyMap';
+import { BACK, type BodyPolygon, FRONT } from './bodyShapes';
 import { MUSCLE_NAMES } from './insightMuscles';
-
-const renders = vi.hoisted(() => ({ count: 0 }));
-
-/** The real library, behind a counter of how often BodyMap renders a figure. */
-vi.mock('react-body-highlighter', async (importOriginal) => {
-  const library = await importOriginal<typeof import('react-body-highlighter')>();
-  const Model = library.default;
-  return {
-    ...library,
-    default: (props: ComponentProps<typeof Model>) => {
-      renders.count += 1;
-      return <Model {...props} />;
-    },
-  };
-});
 
 afterEach(cleanup);
 
 const fillsOf = (container: HTMLElement) =>
   [...container.querySelectorAll('polygon')].map((polygon) => polygon.style.fill);
 
-/** Which muscle each polygon belongs to, read from the library's own click. */
+/** Which muscle each polygon belongs to, read from its click. */
 function polygonsByMuscle(): Map<Muscle, string[]> {
   const found = new Map<Muscle, string[]>();
   const onMuscle = vi.fn<(muscle: Muscle) => void>();
@@ -40,27 +25,34 @@ function polygonsByMuscle(): Map<Muscle, string[]> {
   return found;
 }
 
-describe('highlightFor', () => {
-  it('gives each muscle one row whose frequency is its colour index + 1', () => {
-    const { colours, rows } = highlightFor({ chest: '#111111', abs: '#222222', calves: '#111111' });
-    expect(colours).toEqual(['#111111', '#222222']);
-    expect(rows).toEqual([
-      { name: 'chest', muscles: ['chest'], frequency: 1 },
-      { name: 'abs', muscles: ['abs'], frequency: 2 },
-      { name: 'calves', muscles: ['calves'], frequency: 1 },
-    ]);
+/** How far a polygon's corners sit from the midline, on average. */
+function fromMidline(points: string): number {
+  const xs = points.split(' ').filter((_, index) => index % 2 === 0).map(Number);
+  return xs.reduce((sum, x) => sum + Math.abs(x - 50), 0) / xs.length;
+}
+
+describe('body shapes', () => {
+  it.each([
+    ['front', FRONT],
+    ['back', BACK],
+  ])('puts the adductors on the inner thigh and the abductors on the outer hip of the %s figure', (_, figure: BodyPolygon[]) => {
+    const spread = (muscle: Muscle) => figure.filter((polygon) => polygon.muscle === muscle).map(({ points }) => fromMidline(points));
+    const adductor = spread('adductor');
+    const abductors = spread('abductors');
+    expect(adductor).toHaveLength(2);
+    expect(abductors).toHaveLength(2);
+    expect(Math.min(...abductors)).toBeGreaterThan(Math.max(...adductor));
   });
 
-  it('keeps a colour per muscle across a continuous scale', () => {
-    const fills = Object.fromEntries(
-      (Object.keys(MUSCLE_NAMES) as Muscle[]).map((muscle, index) => [muscle, `#00${String(index).padStart(2, '0')}00`]),
-    );
-    const { colours, rows } = highlightFor(fills);
-    for (const row of rows) expect(colours[(row.frequency as number) - 1]).toBe(fills[row.muscles[0]]);
-  });
-
-  it('skips muscles without a colour', () => {
-    expect(highlightFor({ chest: undefined }).rows).toEqual([]);
+  it('keeps every corner inside the viewBox', () => {
+    for (const { points } of [...FRONT, ...BACK]) {
+      const values = points.split(' ').map(Number);
+      expect(values.length % 2).toBe(0);
+      values.forEach((value, index) => {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(index % 2 === 0 ? 100 : 200);
+      });
+    }
   });
 });
 
@@ -89,13 +81,19 @@ describe('BodyMap', () => {
     expect([...tapped].sort()).toEqual(Object.keys(MUSCLE_NAMES).sort());
   });
 
-  it('does not re-render for an equal fills object', () => {
+  it('treats an equal fills object as the same map, so it does not re-render', () => {
+    const onMuscle = () => {};
+    expect(sameMap({ fills: { chest: '#ff3b30' } }, { fills: { chest: '#ff3b30' } })).toBe(true);
+    expect(sameMap({ fills: { chest: '#ff3b30' } }, { fills: { chest: '#30d158' } })).toBe(false);
+    expect(sameMap({ fills: { chest: '#ff3b30' } }, { fills: { chest: '#ff3b30', abs: '#ff3b30' } })).toBe(false);
+    expect(sameMap({ fills: {}, height: 100 }, { fills: {}, height: 56 })).toBe(false);
+    expect(sameMap({ fills: {}, onMuscle }, { fills: {}, onMuscle })).toBe(true);
+    expect(sameMap({ fills: {}, onMuscle }, { fills: {} })).toBe(false);
+  });
+
+  it('repaints when fills change', () => {
     const { container, rerender } = render(<BodyMap fills={{ chest: '#ff3b30' }} />);
-    const before = renders.count;
-    rerender(<BodyMap fills={{ chest: '#ff3b30' }} />);
-    expect(renders.count).toBe(before);
     rerender(<BodyMap fills={{ chest: '#30d158' }} />);
-    expect(renders.count).toBeGreaterThan(before);
     expect(fillsOf(container)).toContain('rgb(48, 209, 88)');
   });
 

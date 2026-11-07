@@ -1,9 +1,8 @@
 import { COLOURS, TARGET_REPS, colourForReps } from '../domain/colour';
-import { addDays } from '../domain/date';
-import type { Colour, Prediction } from '../domain/types';
-import { e1rm, weightFor } from './curve';
-import { DEFAULT_BODYWEIGHT_KG, roundToLoadable } from './load';
-import { type Outcome, type State, advance, loadsOn, start } from './replay';
+import type { Colour, Entry, Prediction } from '../domain/types';
+import { weightFor } from './curve';
+import { predict, predictRaw } from './index';
+import { barbell, on, set } from './testing';
 
 /** Test support: simulated training logs for AC17. Not part of the model. */
 
@@ -51,7 +50,8 @@ export interface SimulatedSession {
   predicted: number | null;
   /** What the user could really lift for that colour's target reps that day. */
   actual: number;
-  outcome: Outcome;
+  /** Colour of the reps actually reached. */
+  logged: Colour;
 }
 
 const SESSIONS_END_DAY = 365;
@@ -75,16 +75,14 @@ function deviationAt(reps: number, deviation: Prediction): number {
 
 /**
  * Replays a year of one persona, loading the app's rounded prediction every session and
- * taking the set to the last whole rep. `exact` instead logs the day's true capability at
- * target reps: that removes the floor whole reps put under each observation, which is
- * what would otherwise hide the upward ratchet of beats counting more than misses.
+ * taking the set to the last whole rep.
  */
-export function simulate(persona: Persona, seed: number, exact = false): SimulatedSession[] {
+export function simulate(persona: Persona, seed: number): SimulatedSession[] {
   const random = seededRandom(seed);
   const deviation = { ...persona.curve };
   const loss: Prediction = { red: 0, yellow: 0, green: 0 };
   const sessions: SimulatedSession[] = [];
-  let state: State | null = null;
+  const entries: Entry[] = [];
   let layoffTaken = false;
   let day = 0;
   let age = 0;
@@ -96,28 +94,14 @@ export function simulate(persona: Persona, seed: number, exact = false): Simulat
       weightFor(persona.startStrength, reps) *
       Math.exp(deviationAt(reps, deviation) - deviationAt(reps, loss) + dayEffect);
 
-    const date = addDays('2026-01-01', day);
-    const target = TARGET_REPS[colour];
-    const predicted = state ? loadsOn(state, date)[colour] : null;
-    const load =
-      predicted !== null && state
-        ? roundToLoadable(predicted, 'barbell', state.loggedWeights)
-        : Math.round(capability(target) / LOADING_STEP) * LOADING_STEP;
+    const input = barbell(...entries);
+    const predicted = predictRaw(input, on(day))?.[colour] ?? null;
+    const load = predict(input, on(day))?.[colour] ?? Math.round(capability(TARGET_REPS[colour]) / LOADING_STEP) * LOADING_STEP;
 
     let reps = 1;
     while (reps < 30 && capability(reps + 1) >= load) reps++;
-    const exactLoad = Math.round(capability(target) * 4) / 4;
-
-    const logged = {
-      date,
-      colour: colourForReps(exact ? target : reps),
-      bodyweightKg: DEFAULT_BODYWEIGHT_KG,
-      observed: exact ? e1rm(exactLoad, target) : e1rm(load, reps),
-      loggedWeights: [exact ? exactLoad : load],
-    };
-    if (state) advance(state, logged);
-    else state = start(logged, 'barbell');
-    sessions.push({ session, day, colour, predicted, actual: capability(target), outcome: state.outcome });
+    entries.push(set(day, load, reps));
+    sessions.push({ session, day, colour, predicted, actual: capability(TARGET_REPS[colour]), logged: colourForReps(reps) });
 
     const layoff = persona.layoff;
     const pause: Persona['layoff'] | null = layoff !== undefined && !layoffTaken && day >= layoff.afterDay ? layoff : null;
@@ -193,16 +177,6 @@ export const PERSONAS: Persona[] = [
     noise: 0.02,
     spillover: 0.6,
     colourFor: mostlyYellow,
-  },
-  {
-    name: 'yellow only',
-    startStrength: 100,
-    growth: 0.08,
-    tau: 30,
-    curve: LOW_REP_CURVE,
-    noise: 0.015,
-    spillover: 0.7,
-    colourFor: () => 'yellow',
   },
   {
     name: 'eight week layoff',

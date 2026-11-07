@@ -4,6 +4,7 @@ import { EXERCISES } from '../data';
 import type {
   Bodyweight,
   Entry,
+  Equipment,
   Exercise,
   Group,
   ISODate,
@@ -22,6 +23,9 @@ import {
 import { type AppData, useAppData } from '../store';
 
 const GROUPS: readonly Group[] = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core'];
+
+/** Free weights share one rack across exercises; machines, cables and the rest do not. */
+const RACKS: readonly Equipment[] = ['dumbbell', 'barbell', 'kettlebell'];
 
 export interface LoggedExercise {
   exercise: Exercise;
@@ -77,11 +81,25 @@ export function buildQueries(data: AppData): Queries {
   );
   const byId = new Map(exercises.map((exercise) => [exercise.id, exercise]));
 
-  const inputFor = (exerciseId: string): ModelInput => ({
-    equipment: byId.get(exerciseId)?.equipment ?? 'other',
-    entries: entriesById.get(exerciseId) ?? [],
-    bodyweights: data.bodyweights,
-  });
+  const rack = new Map<Equipment, { exerciseId: string; weightKg: number }[]>();
+  for (const { exerciseId, weightKg, deleted } of data.entries) {
+    const equipment = byId.get(exerciseId)?.equipment;
+    if (deleted || !equipment || !RACKS.includes(equipment)) continue;
+    rack.set(equipment, [...(rack.get(equipment) ?? []), { exerciseId, weightKg }]);
+  }
+
+  const inputFor = (exerciseId: string): ModelInput => {
+    const exercise = byId.get(exerciseId);
+    const equipment = exercise?.equipment ?? 'other';
+    return {
+      equipment,
+      perHand: exercise?.perHand ?? false,
+      bodyweightShare: exercise?.bodyweightShare ?? 1,
+      entries: entriesById.get(exerciseId) ?? [],
+      bodyweights: data.bodyweights,
+      rackWeights: (rack.get(equipment) ?? []).flatMap((logged) => (logged.exerciseId === exerciseId ? [] : [logged.weightKg])),
+    };
+  };
 
   const liftsOn = (date: ISODate) =>
     [...entriesById.keys()].flatMap((exerciseId) => {

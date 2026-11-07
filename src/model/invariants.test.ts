@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { COLOURS, colourForReps } from '../domain/colour';
+import { COLOURS } from '../domain/colour';
 import type { Bodyweight, Entry, Equipment, Prediction } from '../domain/types';
 import { oneRepMax, predict, predictRaw, strengthHistory } from './index';
+import type { ModelInput } from './fit';
 import { bodyweightOn } from './load';
-import { replay, type ModelInput } from './replay';
 import { type Random, seededRandom } from './simulator';
 import { log, on, set, weighIn } from './testing';
 
@@ -17,7 +17,6 @@ const EQUIPMENT: Equipment[] = [
   'other',
 ];
 const LOGS = 120;
-const TOLERANCE = 1e-9;
 
 const pick = <T>(random: Random, items: readonly T[]): T =>
   items[Math.floor(random() * items.length)];
@@ -36,15 +35,11 @@ function randomLog(random: Random, equipment: Equipment): ModelInput {
     entries.push(set(day, logged, 1 + Math.floor(random() * 20)));
     day += random() < 0.15 ? 15 + Math.floor(random() * 120) : 1 + Math.floor(random() * 7);
   }
-  return log(equipment, entries, bodyweights);
-}
-
-/** Total load per colour: the only scale on which a bodyweight percentage means anything. */
-function loads(input: ModelInput, day: number): Prediction {
-  const raw = predictRaw(input, on(day)) as Prediction;
-  if (input.equipment !== 'bodyweight') return raw;
-  const bodyweight = bodyweightOn(input.bodyweights, on(day));
-  return { red: raw.red + bodyweight, yellow: raw.yellow + bodyweight, green: raw.green + bodyweight };
+  return log(equipment, entries, bodyweights, {
+    perHand: equipment === 'dumbbell' || (equipment === 'cable' && random() < 0.5),
+    bodyweightShare: equipment === 'bodyweight' ? pick(random, [1, 0.65, 0.35]) : 1,
+    rackWeights: random() < 0.5 ? [scale * 0.9, scale * 1.13] : [],
+  });
 }
 
 const dayOf = (entry: Entry) => Math.round((Date.parse(entry.date) - Date.parse(on(0))) / 86_400_000);
@@ -55,43 +50,36 @@ function forEachLog(run: (input: ModelInput) => void): void {
 }
 
 describe('invariants across random logs', () => {
-  it('AC8: the own colour moves by the largest percentage on every save', () => {
-    let saves = 0;
-    let limited = 0;
-    forEachLog((input) => {
-      for (let i = 1; i < input.entries.length; i++) {
-        const entry = input.entries[i];
-        const day = dayOf(entry);
-        const before = loads({ ...input, entries: input.entries.slice(0, i) }, day);
-        const after = loads({ ...input, entries: input.entries.slice(0, i + 1) }, day);
-        const move = (c: keyof Prediction) => Math.abs(Math.log(after[c] / before[c]));
-        const own = colourForReps(entry.reps);
-        saves += 1;
-        for (const other of COLOURS) {
-          if (other === own) continue;
-          expect(move(other)).toBeLessThanOrEqual(move(own) + TOLERANCE);
-          if (move(own) === 0) expect(move(other)).toBe(0);
-          const heldByOrder = COLOURS.some((c) => c !== other && Math.abs(after[c] - after[other]) < 1e-6);
-          if (heldByOrder) limited += 1;
-          else expect(move(other)).toBeLessThanOrEqual(0.9 * move(own) + TOLERANCE);
-        }
-      }
-    });
-    expect(saves).toBeGreaterThan(2000);
-    expect(limited).toBeLessThan(saves);
-  });
-
-  it('keeps red >= yellow >= green at every session and through any time away', () => {
+  it('keeps red >= yellow >= green at every point of the graph, raw and rounded', () => {
     forEachLog((input) => {
       const lastDay = dayOf(input.entries.at(-1) as Entry);
-      for (const day of [lastDay, lastDay + 8, lastDay + 14, lastDay + 60, lastDay + 400, lastDay + 4000]) {
-        const raw = predictRaw(input, on(day)) as Prediction;
-        expect(raw.red).toBeGreaterThanOrEqual(raw.yellow);
-        expect(raw.yellow).toBeGreaterThanOrEqual(raw.green);
+      for (const prediction of [predictRaw(input, on(lastDay)), predict(input, on(lastDay))] as Prediction[]) {
+        expect(prediction.red).toBeGreaterThanOrEqual(prediction.yellow);
+        expect(prediction.yellow).toBeGreaterThanOrEqual(prediction.green);
       }
-      for (const { loads: point } of replay(input, on(lastDay)).timeline) {
-        expect(point.red).toBeGreaterThanOrEqual(point.yellow);
-        expect(point.yellow).toBeGreaterThanOrEqual(point.green);
+      const { lines } = strengthHistory(input, on(lastDay));
+      lines.red.forEach((point, i) => {
+        expect(point.kg).toBeGreaterThanOrEqual(lines.yellow[i].kg);
+        expect(lines.yellow[i].kg).toBeGreaterThanOrEqual(lines.green[i].kg);
+      });
+    });
+  });
+
+  it('AC11: predicts the same however long after the last session', () => {
+    forEachLog((input) => {
+      const lastDay = dayOf(input.entries.at(-1) as Entry);
+      for (const later of [1, 14, 60, 400]) {
+        expect(predict(input, on(lastDay + later))).toEqual(predict(input, on(lastDay)));
+      }
+    });
+  });
+
+  it('shows only real weights: on the grid or already logged', () => {
+    forEachLog((input) => {
+      const step = input.equipment === 'kettlebell' ? 4 : 2.5;
+      const real = new Set([...input.entries.map(({ weightKg }) => weightKg), ...input.rackWeights]);
+      for (const weight of Object.values(predict(input, on(1000)) as Prediction)) {
+        expect(Math.abs(weight / step - Math.round(weight / step)) < 1e-9 || real.has(weight)).toBe(true);
       }
     });
   });
@@ -102,10 +90,10 @@ describe('invariants across random logs', () => {
       const lastDay = dayOf(input.entries.at(-1) as Entry);
       for (let day = 0; day <= lastDay + 400; day += 37) {
         if (!predict(input, on(day))) continue;
-        const bodyweight = bodyweightOn(input.bodyweights, on(day));
+        const moved = input.bodyweightShare * bodyweightOn(input.bodyweights, on(day));
         for (const prediction of [predict(input, on(day)), predictRaw(input, on(day))]) {
           for (const colour of COLOURS) {
-            expect((prediction as Prediction)[colour] + bodyweight).toBeGreaterThan(0);
+            expect((prediction as Prediction)[colour] + moved).toBeGreaterThan(0);
           }
         }
       }

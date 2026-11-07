@@ -281,18 +281,6 @@ ul {
 .assistance {
   color: var(--accent);
 }
-.sign {
-  width: 64px;
-  min-height: var(--tap);
-  margin-left: auto;
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-size: 19px;
-}
-.sign[aria-pressed='true'] {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .stepper {
   display: flex;
   align-items: center;
@@ -338,6 +326,10 @@ ul {
   color: var(--text);
   font-size: 17px;
   text-align: right;
+}
+.log-bodyweight {
+  color: var(--text);
+  font-size: 17px;
 }
 .log-line input::-webkit-date-and-time-value {
   text-align: right;

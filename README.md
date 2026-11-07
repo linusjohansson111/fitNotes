@@ -42,7 +42,8 @@ name, and the app refuses to back up to it if it is ever made public.
 ## Exercises
 
 `src/data/exercises.json` holds every exercise the app knows, one record per exercise:
-muscles, equipment, base lift, ratio, confidence and reason. Regenerate it with
+muscles, equipment, mechanic, whether it logs per hand, the share of bodyweight it moves,
+base lift, ratio, confidence and reason. Regenerate it with
 `node scripts/build-exercises.mjs`, which refuses to write a bad row. To change a row, edit
 `src/data/catalogue.json`, where ratios and corrections to the source data live, and
 `src/data/gaps.json` for lifts the source lacks.
@@ -53,8 +54,10 @@ Every logged lift counts, for each of its muscles. A lift is compared with your 
 level, so one lift always shows yellow and the map needs at least two before colours
 differ. Tap a muscle to see its numbers.
 
-An exercise's level comes from its base lift's levels at your bodyweight, times its ratio
-and the raise for its group. `RAISES` in `src/balance/index.ts` is yours to edit. Base lift
+An exercise's median comes from its base lift's median at your bodyweight, times its ratio
+and the raise for its group; every derived exercise shares one spread around its median, so
+no base lift makes a muscle easier to score strong. Compound lifts count twice as much as
+isolation lifts. `RAISES` in `src/balance/index.ts` is yours to edit. Base lift
 levels are men's gym percentiles from
 [FitnessVolt](https://fitnessvolt.com/strength-standards/strength-data/), CC BY 4.0, held in
 `src/balance/baseLifts.json`. Its class above 120 kg is left out, because its low

@@ -19,7 +19,7 @@ export type Equipment =
   | 'bodyweight'
   | 'other';
 
-/** Exactly the react-body-highlighter muscle slugs the app uses. */
+/** Every muscle the app tracks. The slugs come from react-body-highlighter and are stored in backups. */
 export type Muscle =
   | 'trapezius'
   | 'upper-back'
@@ -48,8 +48,8 @@ export interface SyncMeta {
 }
 
 /**
- * One strongest set. Dumbbells are per hand. Bodyweight exercises log added
- * weight, negative for assistance.
+ * One strongest set. Per-hand exercises log one hand's weight. Bodyweight exercises
+ * log added weight, negative for assistance.
  */
 export interface Entry extends SyncMeta {
   id: string;
@@ -81,6 +81,8 @@ export type BaseLift =
 
 export type Confidence = 'high' | 'medium' | 'low';
 
+export type Mechanic = 'compound' | 'isolation';
+
 /** One row of src/data/exercises.json. */
 export interface ExerciseDef {
   id: string;
@@ -89,6 +91,12 @@ export interface ExerciseDef {
   primaryMuscles: Muscle[];
   secondaryMuscles: Muscle[];
   equipment: Equipment;
+  /** From the source, or tagged by hand where it has none. Compounds count more on the map. */
+  mechanic: Mechanic;
+  /** Two dumbbells or two cable handles: logged per hand, so the load is twice the weight. */
+  perHand: boolean;
+  /** Bodyweight rows only: the share of bodyweight a rep moves, in (0, 1]. */
+  bodyweightShare?: number;
   baseLift: BaseLift;
   /** This exercise's 1RM over the base lift's, in logged terms. */
   ratio: number;

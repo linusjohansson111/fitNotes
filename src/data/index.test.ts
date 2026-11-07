@@ -159,20 +159,25 @@ describe('exercise bank', () => {
     }
   });
 
-  it('carries exactly the ExerciseDef fields', () => {
+  it('carries exactly the ExerciseDef fields, and a share only on bodyweight rows', () => {
     const fields = [
       'baseLift',
       'confidence',
       'equipment',
       'group',
       'id',
+      'mechanic',
       'name',
+      'perHand',
       'primaryMuscles',
       'ratio',
       'reason',
       'secondaryMuscles',
     ];
-    for (const exercise of EXERCISES) expect(Object.keys(exercise).sort(), exercise.id).toEqual(fields);
+    for (const exercise of EXERCISES) {
+      const expected = exercise.equipment === 'bodyweight' ? [...fields, 'bodyweightShare'].sort() : fields;
+      expect(Object.keys(exercise).sort(), exercise.id).toEqual(expected);
+    }
   });
 
   it('has no cardio', () => {
@@ -467,7 +472,20 @@ describe('AC18: the build refuses bad rows', () => {
     expect(() => validateRows(EXERCISES, BASE_LIFT_NAMES)).not.toThrow();
   });
 
-  it.each(['id', 'name', 'group', 'primaryMuscles', 'secondaryMuscles', 'equipment', 'baseLift', 'ratio', 'confidence', 'reason'])(
+  it.each([
+    'id',
+    'name',
+    'group',
+    'primaryMuscles',
+    'secondaryMuscles',
+    'equipment',
+    'mechanic',
+    'perHand',
+    'baseLift',
+    'ratio',
+    'confidence',
+    'reason',
+  ])(
     'fails a row that lacks %s',
     (field) => {
       const { [field as keyof ExerciseDef]: _, ...row } = GOOD_ROW;
@@ -485,6 +503,26 @@ describe('AC18: the build refuses bad rows', () => {
 
   it('fails a group that does not match the first primary muscle', () => {
     expect(() => validate({ ...GOOD_ROW, group: 'Chest' })).toThrow('first primary muscle is quadriceps');
+  });
+
+  it('fails an unknown mechanic, and a per-hand flag that is not true or false', () => {
+    expect(() => validate({ ...GOOD_ROW, mechanic: 'hybrid' })).toThrow('unknown mechanic "hybrid"');
+    expect(() => validate({ ...GOOD_ROW, perHand: 'yes' })).toThrow('not true or false');
+  });
+
+  it('fails a per-hand row that is neither dumbbell nor cable', () => {
+    expect(() => validate({ ...GOOD_ROW, perHand: true })).toThrow('is per hand, but barbell');
+  });
+
+  const PULL_UPS = byId('Pullups') as ExerciseDef;
+
+  it.each([undefined, 0, -0.2, 1.2, '1'])('fails a bodyweight row with share %s', (bodyweightShare) => {
+    expect(() => validate({ ...PULL_UPS, bodyweightShare })).toThrow('which is not in (0, 1]');
+  });
+
+  it('passes a bodyweight row with a share of 1, and fails a share on a loaded row', () => {
+    expect(() => validate({ ...PULL_UPS, bodyweightShare: 1 })).not.toThrow();
+    expect(() => validate({ ...GOOD_ROW, bodyweightShare: 0.5 })).toThrow('has a bodyweight share, but is barbell');
   });
 
   it('stops the script before it writes anything, naming the row', () => {
@@ -508,6 +546,48 @@ describe('AC18: the build refuses bad rows', () => {
     expect(run.status).not.toBe(0);
     expect(run.stderr).toMatch(/Unknown_Lift lacks baseLift|Catalogue rows with no exercise/);
     expect(readFileSync(output, 'utf8')).toBe(before);
+  });
+});
+
+describe('mechanic, per hand and share', () => {
+  it('takes mechanic from the source, tagging by hand only the rows it leaves untagged', () => {
+    const catalogue: { id: string; mechanic?: string }[] = JSON.parse(readFileSync(join(REPO, 'src/data/catalogue.json'), 'utf8'));
+    expect(catalogue.filter((row) => row.mechanic).map((row) => row.id).sort()).toEqual([
+      'Double_Kettlebell_Windmill',
+      'Reverse_Hyperextension',
+    ]);
+    expect(byId('Barbell_Curl')?.mechanic).toBe('isolation');
+    expect(byId('Barbell_Squat')?.mechanic).toBe('compound');
+    for (const gap of gaps) expect(['compound', 'isolation'], gap.id).toContain(gap.mechanic);
+  });
+
+  it('AC30: logs two dumbbells or two cable handles per hand, and one dumbbell as it is', () => {
+    expect(byId('Incline_Dumbbell_Press')?.perHand).toBe(true);
+    expect(byId('Cable_Rear_Delt_Fly')?.perHand).toBe(true);
+    expect(byId('Cable_Crossover')?.perHand).toBe(true);
+    expect(byId('Bent-Arm_Dumbbell_Pullover')?.perHand).toBe(false);
+    expect(byId('One-Arm_Dumbbell_Row')?.perHand).toBe(false);
+    expect(byId('Concentration_Curls')?.perHand).toBe(false);
+    expect(byId('Triceps_Pushdown')?.perHand).toBe(false);
+    for (const row of EXERCISES.filter(({ perHand }) => perHand)) {
+      expect(['dumbbell', 'cable'], row.id).toContain(row.equipment);
+    }
+  });
+
+  it('moves the whole body on dips, chin-ups, pull-ups and the like, and part of it on push-ups', () => {
+    for (const id of ['Parallel_Bar_Dip', 'Chin-Up', 'Pullups', 'Muscle_Up', 'Weighted_Pull_Ups', 'gap_assisted_pull_up_machine']) {
+      expect(byId(id)?.bodyweightShare, id).toBe(1);
+    }
+    expect(byId('Pushups')?.bodyweightShare).toBeLessThan(1);
+    expect(byId('Crunches')?.bodyweightShare).toBeLessThan(byId('Pushups')?.bodyweightShare as number);
+  });
+
+  it('AC35: lists only muscles a lift loads substantially', () => {
+    expect(byId('Thigh_Adductor')?.secondaryMuscles).not.toContain('gluteal');
+    expect(byId('Thigh_Adductor')?.secondaryMuscles).not.toContain('hamstring');
+    for (const id of ['Barbell_Squat', 'Front_Barbell_Squat', 'Leg_Press', 'Dumbbell_Lunges', 'Barbell_Deadlift']) {
+      expect(byId(id)?.secondaryMuscles, id).not.toContain('calves');
+    }
   });
 });
 

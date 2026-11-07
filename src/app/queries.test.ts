@@ -67,6 +67,34 @@ describe('buildQueries', () => {
     expect(withOld.logged('2026-03-02')).toEqual(without.logged('2026-03-02'));
   });
 
+  it('AC29: shares logged dumbbells across exercises, but not machine weights', () => {
+    const press = 'Incline_Dumbbell_Press';
+    const curl = 'Dumbbell_Bicep_Curl';
+    const own = [entry(press, '2026-03-01', 40, 4), entry(press, '2026-03-04', 37.5, 8)];
+    for (const kg of Object.values(buildQueries(data(own)).predict(press, '2026-03-05')!)) {
+      expect([39.5, 33.5]).not.toContain(kg);
+      expect(kg % 2.5 === 0 || [40, 37.5].includes(kg)).toBe(true);
+    }
+
+    // A curl of 12.5 x 7 per hand puts yellow just under 12 kg.
+    const curlOnly = [entry(curl, '2026-03-01', 12.5, 7)];
+    expect(buildQueries(data(curlOnly)).predict(curl, '2026-03-02')?.yellow).toBe(12.5);
+    const withPress = buildQueries(data([...curlOnly, entry(press, '2026-03-01', 12, 8)]));
+    expect(withPress.predict(curl, '2026-03-02')?.yellow).toBe(12);
+
+    const machine = 'Leg_Extensions';
+    const alone = buildQueries(data([entry(machine, '2026-03-01', 50, 8)]));
+    const withOther = buildQueries(data([entry(machine, '2026-03-01', 50, 8), entry('Lying_Leg_Curls', '2026-03-01', 51, 8)]));
+    expect(withOther.predict(machine, '2026-03-02')).toEqual(alone.predict(machine, '2026-03-02'));
+  });
+
+  it('AC32: suggests less added weight for 5 reps on Pushups than on Pullups, both first logged at 0 x 20', () => {
+    const queries = buildQueries(data([entry('Pushups', '2026-03-01', 0, 20), entry('Pullups', '2026-03-01', 0, 20)]));
+    const pushUps = queries.predict('Pushups', '2026-03-02')?.red as number;
+    const pullUps = queries.predict('Pullups', '2026-03-02')?.red as number;
+    expect(pushUps).toBeLessThan(pullUps);
+  });
+
   it('reports no bodyweight until one is recorded', () => {
     expect(buildQueries(data([], { bodyweights: [] })).bodyweightKg('2026-03-01')).toBeNull();
     expect(buildQueries(data([])).bodyweightKg('2026-03-01')).toBe(80);

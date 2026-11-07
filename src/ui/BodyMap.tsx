@@ -1,7 +1,6 @@
-import { memo, useMemo } from 'react';
-import Model, { type IExerciseData, type IMuscleStats } from 'react-body-highlighter';
+import { memo } from 'react';
 import type { Muscle } from '../domain/types';
-import { isMuscle } from './insightMuscles';
+import { BACK, type BodyPolygon, FRONT } from './bodyShapes';
 import './insight.css';
 
 const BODY_COLOUR = '#3a3a3c';
@@ -17,54 +16,41 @@ export interface BodyMapProps {
   height?: number;
 }
 
-/**
- * The library colours a muscle with `colours[frequency - 1]` and sums frequency
- * across rows, so one row per muscle turns frequency into a palette index.
- */
-export function highlightFor(fills: BodyMapProps['fills']): { colours: string[]; rows: IExerciseData[] } {
-  const filled = (Object.entries(fills) as [Muscle, string | undefined][]).flatMap(([muscle, colour]) =>
-    colour ? [{ muscle, colour }] : [],
+function Figure({ polygons, fills, onMuscle }: { polygons: BodyPolygon[] } & BodyMapProps) {
+  return (
+    <svg className="ins-figure" viewBox="0 0 100 200">
+      {polygons.map(({ muscle, points }, index) => (
+        <polygon
+          key={index}
+          points={points}
+          style={{ fill: (muscle && fills[muscle]) || BODY_COLOUR }}
+          onClick={muscle && onMuscle ? () => onMuscle(muscle) : undefined}
+        />
+      ))}
+    </svg>
   );
-  const colours = [...new Set(filled.map(({ colour }) => colour))];
-  const rows = filled.map(({ muscle, colour }) => ({
-    name: muscle,
-    muscles: [muscle],
-    frequency: colours.indexOf(colour) + 1,
-  }));
-  return { colours, rows };
 }
 
-function sameFills(a: BodyMapProps['fills'], b: BodyMapProps['fills']): boolean {
-  const muscles = Object.keys(a) as Muscle[];
-  return muscles.length === Object.keys(b).length && muscles.every((muscle) => a[muscle] === b[muscle]);
+/** Whether two props would draw the same map. Compares `fills` by content, because lists build it inline. */
+export function sameMap(a: BodyMapProps, b: BodyMapProps): boolean {
+  const muscles = Object.keys(a.fills) as Muscle[];
+  return (
+    a.height === b.height &&
+    a.onMuscle === b.onMuscle &&
+    muscles.length === Object.keys(b.fills).length &&
+    muscles.every((muscle) => a.fills[muscle] === b.fills[muscle])
+  );
 }
 
-/**
- * Front and back figures side by side. Compares `fills` by content, because lists
- * mount many of these and tend to build the object inline.
- */
-export const BodyMap = memo(
-  function BodyMap({ fills, onMuscle, height = DEFAULT_HEIGHT }: BodyMapProps) {
-    const { colours, rows } = useMemo(() => highlightFor(fills), [fills]);
-    const onClick = useMemo(
-      () =>
-        onMuscle &&
-        (({ muscle }: IMuscleStats) => {
-          if (isMuscle(muscle)) onMuscle(muscle);
-        }),
-      [onMuscle],
-    );
-    const shared = { data: rows, highlightedColors: colours, bodyColor: BODY_COLOUR, onClick };
-
-    return (
-      <div
-        className={onMuscle ? 'ins-body ins-body--tap' : 'ins-body'}
-        style={{ width: height * (1 + FIGURE_GAP), gap: height * FIGURE_GAP }}
-      >
-        <Model type="anterior" {...shared} />
-        <Model type="posterior" {...shared} />
-      </div>
-    );
-  },
-  (a, b) => a.height === b.height && a.onMuscle === b.onMuscle && sameFills(a.fills, b.fills),
-);
+/** Front and back figures side by side. */
+export const BodyMap = memo(function BodyMap({ fills, onMuscle, height = DEFAULT_HEIGHT }: BodyMapProps) {
+  return (
+    <div
+      className={onMuscle ? 'ins-body ins-body--tap' : 'ins-body'}
+      style={{ width: height * (1 + FIGURE_GAP), gap: height * FIGURE_GAP }}
+    >
+      <Figure polygons={FRONT} fills={fills} onMuscle={onMuscle} />
+      <Figure polygons={BACK} fills={fills} onMuscle={onMuscle} />
+    </div>
+  );
+}, sameMap);

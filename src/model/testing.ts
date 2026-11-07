@@ -1,6 +1,6 @@
 import { addDays } from '../domain/date';
 import type { Bodyweight, Entry, Equipment, ISODate } from '../domain/types';
-import type { ModelInput } from './replay';
+import type { ModelInput } from './fit';
 
 /** Test support: terse builders for logs. Not part of the model. */
 
@@ -21,10 +21,19 @@ export function set(day: number, weightKg: number, reps: number, extra: Partial<
   };
 }
 
-export const log = (equipment: Equipment, entries: Entry[], bodyweights: Bodyweight[] = []): ModelInput => ({
+export const log = (
+  equipment: Equipment,
+  entries: Entry[],
+  bodyweights: Bodyweight[] = [],
+  extra: Partial<ModelInput> = {},
+): ModelInput => ({
   equipment,
   entries,
   bodyweights,
+  perHand: false,
+  bodyweightShare: 1,
+  rackWeights: [],
+  ...extra,
 });
 
 export const barbell = (...entries: Entry[]): ModelInput => log('barbell', entries);

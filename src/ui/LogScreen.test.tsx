@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, today } from '../domain/date';
 import { addEntry, deleteEntry, setBodyweight, updateEntry } from '../store';
 import { LogScreen } from './LogScreen';
-import { BENCH, CURL, PULLUP, SQUAT, entry, queriesFor } from './testing';
+import { BENCH, CURL, INCLINE, KETTLEBELL, PULLUP, SQUAT, entry, queriesFor } from './testing';
 
 vi.mock('../store', () => ({
   addEntry: vi.fn(async () => ({})),
@@ -177,29 +177,74 @@ describe('saving', () => {
 });
 
 describe('weight steps', () => {
-  it('steps by the loadable step learned from this exercise', async () => {
+  it('steps by the 2.5 kg grid, from any weight', async () => {
     const user = userEvent.setup();
     const queries = queriesFor([entry(CURL, 3, 20, 8), entry(CURL, 2, 21, 8), entry(CURL, 1, 22, 8)]);
     render(<LogScreen queries={queries} exerciseId={CURL} />);
     await user.clear(weight());
-    await user.type(weight(), '20');
+    await user.type(weight(), '21');
     await user.click(screen.getByRole('button', { name: 'More weight' }));
-    expect(weight().value).toBe('21');
+    expect(weight().value).toBe('23.5');
+    await user.click(screen.getByRole('button', { name: 'Less weight' }));
+    await user.click(screen.getByRole('button', { name: 'Less weight' }));
+    expect(weight().value).toBe('18.5');
   });
 
-  it('labels dumbbells per hand', () => {
-    render(<LogScreen queries={queriesFor([])} exerciseId={CURL} />);
-    expect(screen.getByLabelText('Per hand')).toBeTruthy();
+  it('steps kettlebells by 4 kg', async () => {
+    const user = userEvent.setup();
+    render(<LogScreen queries={queriesFor([])} exerciseId={KETTLEBELL} />);
+    await user.type(weight(), '16');
+    await user.click(screen.getByRole('button', { name: 'More weight' }));
+    expect(weight().value).toBe('20');
   });
 
-  it('uses a decimal keypad', () => {
+  it('AC29: opens Incline Dumbbell Press on real dumbbells only', () => {
+    const queries = queriesFor([entry(INCLINE, 5, 40, 4), entry(INCLINE, 2, 37.5, 8)]);
+    for (const date of [TODAY, addDays(TODAY, -3)]) {
+      for (const kg of Object.values(queries.predict(INCLINE, date)!)) {
+        expect([39.5, 33.5]).not.toContain(kg);
+        expect(kg % 2.5).toBe(0);
+      }
+    }
+    render(<LogScreen queries={queries} exerciseId={INCLINE} />);
+    expect(Number(weight().value) % 2.5).toBe(0);
+  });
+
+  it('uses a decimal keypad on loaded exercises', () => {
     render(<LogScreen queries={queriesFor([])} exerciseId={BENCH} />);
     expect(weight().inputMode).toBe('decimal');
   });
 });
 
-describe('AC12: bodyweight exercises', () => {
-  const toggle = () => screen.getByRole('button', { name: 'Assistance' });
+describe('AC30: the weight label', () => {
+  it.each([
+    [INCLINE, 'Per hand'],
+    ['Cable_Rear_Delt_Fly', 'Per hand'],
+    [CURL, 'Per hand'],
+    ['Bent-Arm_Dumbbell_Pullover', 'Weight'],
+    ['Concentration_Curls', 'Weight'],
+    [BENCH, 'Weight'],
+    [PULLUP, 'Added weight'],
+  ])('labels %s "%s"', (exerciseId, label) => {
+    render(<LogScreen queries={queriesFor([])} exerciseId={exerciseId} />);
+    expect(screen.getByLabelText(label)).toBe(weight());
+  });
+});
+
+describe('AC12, AC31: bodyweight exercises', () => {
+  it('shows the Settings bodyweight read-only above one input, with no sign button', () => {
+    render(<LogScreen queries={queriesFor([])} exerciseId={PULLUP} />);
+    const bodyweight = screen.getByRole('status', { name: 'Bodyweight' });
+    expect(bodyweight.textContent).toBe('80 kg');
+    expect(screen.queryByRole('textbox', { name: 'Bodyweight' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /assist|sign|\+\/−/i })).toBeNull();
+    expect(bodyweight.compareDocumentPosition(weight()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('opens a keyboard with a minus on the one signed input', () => {
+    render(<LogScreen queries={queriesFor([])} exerciseId={PULLUP} />);
+    expect(weight().inputMode).toBe('text');
+  });
 
   it('labels the field Added weight and accepts 0', async () => {
     const user = userEvent.setup();
@@ -209,17 +254,17 @@ describe('AC12: bodyweight exercises', () => {
     expect(vi.mocked(addEntry).mock.calls[0][0].weightKg).toBe(0);
   });
 
-  it('turns typed weight into assistance with the toggle, as the keypad has no minus', async () => {
+  it.each([
+    ['-12,5', -12.5],
+    ['−10', -10],
+    ['7.5', 7.5],
+  ])('saves typed %s as %f kg', async (text, kg) => {
     const user = userEvent.setup();
     render(<LogScreen queries={queriesFor([])} exerciseId={PULLUP} />);
-    await user.type(weight(), '12,5');
-    expect(screen.queryByText('Assistance')).toBeNull();
-    await user.click(toggle());
-    expect(weight().value).toBe('−12,5');
-    expect(toggle().getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Assistance')).toBeTruthy();
+    await user.type(weight(), text);
+    expect(screen.queryByText('Assistance') !== null).toBe(kg < 0);
     await user.click(save());
-    expect(vi.mocked(addEntry).mock.calls[0][0].weightKg).toBe(-12.5);
+    expect(vi.mocked(addEntry).mock.calls[0][0].weightKg).toBe(kg);
   });
 
   it('shows a negative prediction as assistance', () => {
@@ -229,22 +274,29 @@ describe('AC12: bodyweight exercises', () => {
     expect(screen.getByText('Assistance')).toBeTruthy();
   });
 
-  it('steps below zero into assistance', async () => {
+  it('steps across zero both ways', async () => {
     const user = userEvent.setup();
     render(<LogScreen queries={queriesFor([])} exerciseId={PULLUP} />);
     await user.type(weight(), '0');
     await user.click(screen.getByRole('button', { name: 'Less weight' }));
     expect(weight().value).toBe('−2.5');
+    await user.click(screen.getByRole('button', { name: 'More weight' }));
+    await user.click(screen.getByRole('button', { name: 'More weight' }));
+    expect(weight().value).toBe('2.5');
   });
 
-  it('has no sign toggle on loaded exercises', () => {
+  it('shows no assistance on loaded exercises', async () => {
+    const user = userEvent.setup();
     render(<LogScreen queries={queriesFor([])} exerciseId={BENCH} />);
-    expect(screen.queryByRole('button', { name: 'Assistance' })).toBeNull();
+    await user.type(weight(), '-5');
+    expect(screen.queryByText('Assistance')).toBeNull();
+    expect(save().disabled).toBe(true);
   });
 
-  it('asks for bodyweight when none is recorded, and saves it with the entry', async () => {
+  it('asks for bodyweight once when none is recorded, and saves it to Settings with the entry', async () => {
     const user = userEvent.setup();
     render(<LogScreen queries={queriesFor([], { bodyweights: [] })} exerciseId={PULLUP} />);
+    expect(screen.queryByRole('status', { name: 'Bodyweight' })).toBeNull();
     await user.type(weight(), '10');
     expect(save().disabled).toBe(true);
     await user.type(screen.getByLabelText('Bodyweight'), '74,5');
@@ -257,7 +309,7 @@ describe('AC12: bodyweight exercises', () => {
 
   it('does not ask once a bodyweight is recorded, or on other equipment', () => {
     const { unmount } = render(<LogScreen queries={queriesFor([])} exerciseId={PULLUP} />);
-    expect(screen.queryByLabelText('Bodyweight')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Bodyweight' })).toBeNull();
     unmount();
     render(<LogScreen queries={queriesFor([], { bodyweights: [] })} exerciseId={BENCH} />);
     expect(screen.queryByLabelText('Bodyweight')).toBeNull();

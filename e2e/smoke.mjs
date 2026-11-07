@@ -139,7 +139,7 @@ function daysAgo(days) {
 }
 
 const muscleFills = (page) =>
-  page.$$eval('.rbh polygon, svg polygon', (polygons) => [...new Set(polygons.map((polygon) => getComputedStyle(polygon).fill))]);
+  page.$$eval('svg polygon', (polygons) => [...new Set(polygons.map((polygon) => getComputedStyle(polygon).fill))]);
 
 const homeRows = (page) => page.$$eval('.row', (rows) => rows.map((row) => row.innerText.replace(/\s+/g, ' ').trim()));
 
@@ -223,7 +223,17 @@ async function run(browser) {
   await until(() => page.locator('.result').count().then((count) => count === 0), 3_000);
   check('AC3 search offers no way to add an exercise', (await page.locator('main a').count()) === 0);
   await shot(page, '5-no-add');
-  await logNew(page, 'Incline Dumbell Press', 'Incline Dumbbell Press', 30, 8);
+  // AC29: two logged weights give only real dumbbells, never 39.5 or 33.5.
+  await logNew(page, 'Incline Dumbell Press', 'Incline Dumbbell Press', 40, 4, daysAgo(2));
+  await page.getByRole('link', { name: 'Log', exact: true }).click();
+  await logWith(page, 37.5, 8);
+  const shown = (await page.locator('.ins-weight-kg').allInnerTexts()).map((text) => Number(text.replace('−', '-')));
+  check(
+    'AC29 Incline Dumbbell Press shows only real dumbbell weights',
+    shown.length === 3 && shown.every((kg) => kg % 2.5 === 0 || kg === 37.5 || kg === 40),
+    shown.join(' '),
+  );
+  await shot(page, '5-real-weights');
   await page.getByLabel('Map', { exact: true }).click();
   await page.locator('svg polygon').first().waitFor();
   const withIncline = await muscleFills(page);
@@ -234,23 +244,51 @@ async function run(browser) {
   check('AC23 the link sits below the map', (await attribution.boundingBox()).y >= figureBottom);
   await shot(page, '5-map-attribution');
 
+  // AC31: bodyweight read-only from Settings, above one signed input.
+  await page.getByLabel('Add exercise').click();
+  await page.getByLabel('Search exercises').fill('pullups');
+  await page.getByRole('link', { name: 'Pullups', exact: true }).first().click();
+  const bodyweight = page.getByRole('status', { name: 'Bodyweight' });
+  check('AC31 shows the Settings bodyweight read-only', (await bodyweight.innerText()) === '80 kg');
+  check('AC31 the bodyweight sits above the weight input', (await bodyweight.boundingBox()).y < (await page.locator('#log-weight').boundingBox()).y);
+  check('AC31 one weight input and no sign button', (await page.locator('form.log input').count()) === 3 && (await page.getByRole('button', { name: /assist|\+\/−/i }).count()) === 0);
+  check('AC31 the weight keyboard has a minus', (await page.locator('#log-weight').getAttribute('inputmode')) === 'text');
+  await page.locator('#log-weight').fill('-5');
+  check('AC31 the input takes negative weight as assistance', await page.getByText('Assistance', { exact: true }).isVisible());
+  await shot(page, '6-bodyweight-form');
+
   // AC12: a target out of reach shows as assistance.
-  await logNew(page, 'pullups', 'Pullups', 0, 3);
+  await logWith(page, 0, 3);
   check('AC12 an out-of-reach target shows a negative weight', /−\d/.test(await main(page)));
   await shot(page, '6-assisted');
+
+  // AC30: two cable handles log per hand.
+  await page.getByLabel('Add exercise').click();
+  await page.getByLabel('Search exercises').fill('cable rear delt fly');
+  await page.getByRole('link', { name: 'Cable Rear Delt Fly', exact: true }).first().click();
+  check('AC30 Cable Rear Delt Fly says Per hand', (await page.locator('label[for="log-weight"]').innerText()) === 'Per hand');
+  await logWith(page, 7.5, 12);
+
+  // AC15: tapping biceps shows its numbers. Pullups load them.
+  await page.getByLabel('Map', { exact: true }).click();
+  await page.locator('polygon[points^="16.7346939 68.1632653"]').first().dispatchEvent('click');
+  const biceps = page.getByRole('region', { name: 'Biceps' });
+  await biceps.waitFor();
+  check('AC15 tapping biceps shows its numbers', /Pullups\s+\d+ kg/.test(await biceps.innerText()), await biceps.innerText());
+  await shot(page, '6-biceps');
 
   check('offline work sent nothing to GitHub', gh.puts.length === putsBeforeOffline);
 
   await page.reload();
   await page.getByLabel('Map', { exact: true }).waitFor();
   await page.getByLabel('Home', { exact: true }).first().click();
-  check('AC1 entries survive an offline reload', (await homeRows(page)).length === 4);
+  check('AC1 entries survive an offline reload', (await homeRows(page)).length === 5);
 
   // AC2: reconnecting backs up with no user action.
   const rows = await homeRows(page);
   gh.online = true;
   await context.setOffline(false);
-  const backedUp = await until(() => Promise.resolve(gh.snapshot?.entries.length === 5));
+  const backedUp = await until(() => Promise.resolve(gh.snapshot?.entries.length === 7));
   check('AC2 reconnecting backs up without user action', backedUp, JSON.stringify(gh.snapshot)?.slice(0, 200));
   check('AC2 the bodyweight is in the backup', gh.snapshot?.bodyweights.length === 1);
   check('AC2 the backup keeps its format', Array.isArray(gh.snapshot?.customExercises) && gh.snapshot?.version === 1);

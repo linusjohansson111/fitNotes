@@ -1,9 +1,10 @@
 import { type FocusEvent, type ReactNode, type SubmitEvent, useReducer, useState } from 'react';
 import type { Queries } from '../app/queries';
 import { today } from '../domain/date';
-import type { Entry, Exercise, Equipment } from '../domain/types';
-import { loadableStep } from '../model/load';
+import type { Entry, Exercise } from '../domain/types';
+import { gridStep } from '../model';
 import { addEntry, deleteEntry, setBodyweight, updateEntry } from '../store';
+import { formatKg } from './format';
 import { MinusIcon, PlusIcon } from './icons';
 import {
   editLogForm,
@@ -16,10 +17,11 @@ import {
 } from './logForm';
 import { go, href } from './nav';
 
-const WEIGHT_LABEL: Partial<Record<Equipment, string>> = {
-  bodyweight: 'Added weight',
-  dumbbell: 'Per hand',
-};
+/** Leaves no doubt about which weight to enter. */
+function weightLabel({ equipment, perHand }: Exercise): string {
+  if (equipment === 'bodyweight') return 'Added weight';
+  return perHand ? 'Per hand' : 'Weight';
+}
 
 function Stepper({
   name,
@@ -57,13 +59,15 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
   const [failed, setFailed] = useState(false);
 
   const { id: exerciseId, equipment } = exercise;
-  const step = loadableStep(
+  const isBodyweight = equipment === 'bodyweight';
+  const context = {
     equipment,
-    queries.entries(exerciseId).map(({ weightKg }) => weightKg),
-  );
-  const context = { equipment, bodyweightKg: queries.bodyweightKg(state.date), today: date };
+    bodyweightShare: exercise.bodyweightShare ?? 1,
+    bodyweightKg: queries.bodyweightKg(state.date),
+    today: date,
+  };
   const result = submission(state, context);
-  const floor = weightFloor(equipment, context.bodyweightKg);
+  const floor = weightFloor(context, context.bodyweightKg);
 
   /** Runs one write, then leaves. A second tap while it runs does nothing. */
   async function finish(write: () => Promise<void>) {
@@ -103,29 +107,44 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
         {exercise.name}
       </a>
 
+      {isBodyweight && context.bodyweightKg !== null && (
+        <div className="log-line">
+          <span id="log-bodyweight-label">Bodyweight</span>
+          <output className="log-bodyweight" aria-labelledby="log-bodyweight-label">
+            {formatKg(context.bodyweightKg)} kg
+          </output>
+        </div>
+      )}
+      {needsBodyweight(context) && (
+        <div className="log-line">
+          <label htmlFor="log-bodyweight">Bodyweight</label>
+          <input
+            id="log-bodyweight"
+            inputMode="decimal"
+            autoComplete="off"
+            value={state.bodyweightText}
+            onChange={(event) => dispatch({ type: 'bodyweight', text: event.target.value })}
+          />
+        </div>
+      )}
+
       <div className="log-label">
-        <label htmlFor="log-weight">{WEIGHT_LABEL[equipment] ?? 'Weight'}</label>
-        {equipment === 'bodyweight' && (
-          <>
-            {isAssistance(state) && <span className="assistance">Assistance</span>}
-            <button
-              type="button"
-              className="sign"
-              aria-label="Assistance"
-              aria-pressed={isAssistance(state)}
-              onClick={() => dispatch({ type: 'flipSign' })}
-            >
-              +/−
-            </button>
-          </>
-        )}
+        <label htmlFor="log-weight">{weightLabel(exercise)}</label>
+        {isBodyweight && isAssistance(state) && <span className="assistance">Assistance</span>}
       </div>
-      <Stepper name="weight" onStep={(direction) => dispatch({ type: 'stepWeight', delta: direction * step, floor })}>
+      <Stepper
+        name="weight"
+        onStep={(direction) => dispatch({ type: 'stepWeight', delta: direction * gridStep(equipment), floor })}
+      >
+        {/* The iOS decimal pad has no minus, so added weight takes the full keyboard. */}
         <input
           id="log-weight"
           className="log-weight"
-          inputMode="decimal"
+          inputMode={isBodyweight ? 'text' : 'decimal'}
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           value={state.weightText}
           onChange={(event) => dispatch({ type: 'weight', text: event.target.value })}
           onFocus={selectAll}
@@ -147,19 +166,6 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
           onFocus={selectAll}
         />
       </Stepper>
-
-      {needsBodyweight(context) && (
-        <div className="log-line">
-          <label htmlFor="log-bodyweight">Bodyweight</label>
-          <input
-            id="log-bodyweight"
-            inputMode="decimal"
-            autoComplete="off"
-            value={state.bodyweightText}
-            onChange={(event) => dispatch({ type: 'bodyweight', text: event.target.value })}
-          />
-        </div>
-      )}
 
       <div className="log-line">
         <label htmlFor="log-date">Date</label>

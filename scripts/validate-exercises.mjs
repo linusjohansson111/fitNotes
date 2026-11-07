@@ -29,6 +29,8 @@ const FIELDS = [
   'primaryMuscles',
   'secondaryMuscles',
   'equipment',
+  'mechanic',
+  'perHand',
   'baseLift',
   'ratio',
   'confidence',
@@ -36,6 +38,8 @@ const FIELDS = [
 ];
 
 const CONFIDENCE = ['high', 'medium', 'low'];
+const MECHANIC = ['compound', 'isolation'];
+const PER_HAND_EQUIPMENT = ['dumbbell', 'cable'];
 
 function problemsWith(row, baseLifts) {
   const problems = FIELDS.filter((field) => row[field] === undefined || row[field] === '').map(
@@ -48,6 +52,19 @@ function problemsWith(row, baseLifts) {
   if (!CONFIDENCE.includes(row.confidence)) problems.push(`has unknown confidence "${row.confidence}"`);
   if (row.group !== GROUP_OF_MUSCLE[row.primaryMuscles[0]]) {
     problems.push(`has group ${row.group}, but its first primary muscle is ${row.primaryMuscles[0]}`);
+  }
+  if (!MECHANIC.includes(row.mechanic)) problems.push(`has unknown mechanic "${row.mechanic}"`);
+  if (typeof row.perHand !== 'boolean') problems.push(`has perHand ${row.perHand}, which is not true or false`);
+  else if (row.perHand && !PER_HAND_EQUIPMENT.includes(row.equipment)) {
+    problems.push(`is per hand, but ${row.equipment} is not a dumbbell or cable`);
+  }
+  if (row.equipment === 'bodyweight') {
+    const share = row.bodyweightShare;
+    if (!(typeof share === 'number' && share > 0 && share <= 1)) {
+      problems.push(`is a bodyweight row with share ${share}, which is not in (0, 1]`);
+    }
+  } else if (row.bodyweightShare !== undefined) {
+    problems.push(`has a bodyweight share, but is ${row.equipment}`);
   }
   return problems;
 }

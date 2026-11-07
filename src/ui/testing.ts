@@ -7,6 +7,8 @@ export const BENCH = 'Barbell_Bench_Press_-_Medium_Grip';
 export const SQUAT = 'Barbell_Squat';
 export const PULLUP = 'Pullups';
 export const CURL = 'Dumbbell_Bicep_Curl';
+export const INCLINE = 'Incline_Dumbbell_Press';
+export const KETTLEBELL = 'Alternating_Kettlebell_Press';
 
 let nextId = 1;
 

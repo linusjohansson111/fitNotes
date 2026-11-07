@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES } from '../data';
 import type { ExerciseDef, Group, Muscle } from '../domain/types';
+import type { BaseLift } from '../domain/types';
 import {
   BASE_LIFTS,
+  BASE_ROWS,
   CONFIDENCE_WEIGHT,
   LEVEL_NAMES,
+  MECHANIC_WEIGHT,
   RAISES,
   balanceColour,
   muscleBalance,
@@ -26,21 +29,44 @@ function row(id: string): ExerciseDef {
   return found;
 }
 
+/** A base lift's kg at each level for a bodyweight, interpolated between classes. */
+function measured(baseLift: BaseLift, bodyweightKg: number): number[] {
+  const classes = BASE_LIFTS[baseLift];
+  const bodyweights = Object.keys(classes).map(Number);
+  const kg = Math.min(Math.max(bodyweightKg, bodyweights[0]), bodyweights[bodyweights.length - 1]);
+  const below = Math.max(...bodyweights.filter((bodyweight) => bodyweight <= kg));
+  const above = Math.min(...bodyweights.filter((bodyweight) => bodyweight >= kg));
+  const share = above === below ? 0 : (kg - below) / (above - below);
+  return classes[below].map((low, level) => low + (classes[above][level] - low) * share);
+}
+
+const WEIGHTED: BaseLift[] = ['Back Squat', 'Bench Press', 'Deadlift', 'Front Squat', 'Sumo Deadlift', 'Incline Bench Press', 'Overhead Press', 'Pendlay Row'];
+const BODYWEIGHT: BaseLift[] = ['Dip', 'Chin-Up', 'Pull-Up'];
+
 /**
- * A row's raised value, worked out level-first: the code under test goes
- * bodyweight-first, and both must meet at the same number.
+ * A row's raised kg at a level, worked out independently of the code under test: measured
+ * levels for a base row, else its median times the mean multiples of its kind of base lift.
  */
 function tableKg(exercise: ExerciseDef, bodyweightKg: number, level: number): number {
-  const classes = BASE_LIFTS[exercise.baseLift];
-  const bodyweights = Object.keys(classes).map(Number);
-  const below = Math.max(...bodyweights.filter((bodyweight) => bodyweight <= bodyweightKg));
-  const above = Math.min(...bodyweights.filter((bodyweight) => bodyweight >= bodyweightKg));
+  const raise = exercise.ratio * RAISES[exercise.group];
+  let levels: number[];
+  if (BASE_ROWS[exercise.baseLift] === exercise.id) {
+    levels = measured(exercise.baseLift, bodyweightKg).map((kg) => kg * raise);
+  } else {
+    const lifts = exercise.equipment === 'bodyweight' ? BODYWEIGHT : WEIGHTED;
+    const median = measured(exercise.baseLift, bodyweightKg)[2] * raise;
+    levels = [0, 1, 2, 3, 4].map(
+      (index) =>
+        median *
+        (lifts.reduce((sum, lift) => {
+          const own = measured(lift, bodyweightKg);
+          return sum + own[index] / own[2];
+        }, 0) /
+          lifts.length),
+    );
+  }
   const lower = Math.min(3, Math.max(0, Math.floor(level)));
-  const atLevel = (kg: number[]): number => kg[lower] + (kg[lower + 1] - kg[lower]) * (level - lower);
-  const low = atLevel(classes[below]);
-  const high = atLevel(classes[above]);
-  const share = above === below ? 0 : (bodyweightKg - below) / (above - below);
-  return (low + (high - low) * share) * exercise.ratio * RAISES[exercise.group];
+  return levels[lower] + (levels[lower + 1] - levels[lower]) * (level - lower);
 }
 
 const lift = (id: string, level: number, bodyweightKg = 80): LiftStrength => ({
@@ -52,11 +78,11 @@ const lift = (id: string, level: number, bodyweightKg = 80): LiftStrength => ({
 const everyLiftAt = (level: number, bodyweightKg: number): LiftStrength[] =>
   EXERCISES.map(({ id }) => lift(id, level, bodyweightKg));
 
-const BASE_ROWS = EXERCISES.filter(({ reason }) => reason.startsWith('Base lift')).map(({ id }) => id);
+const BASE_IDS = Object.values(BASE_ROWS);
 
 /** The base lifts at level 2, and one more lift off them by `delta`. */
 const shifted = (id: string, delta: number): LiftStrength[] => [
-  ...BASE_ROWS.map((baseRow) => lift(baseRow, 2)),
+  ...BASE_IDS.map((baseRow) => lift(baseRow, 2)),
   lift(id, 2 + delta),
 ];
 
@@ -268,8 +294,10 @@ describe('confidence', () => {
   });
 
   it('marks base lifts high', () => {
-    expect(BASE_ROWS).toHaveLength(11);
-    for (const id of BASE_ROWS) expect(row(id).confidence, id).toBe('high');
+    expect(BASE_IDS).toHaveLength(11);
+    for (const [baseLift, id] of Object.entries(BASE_ROWS)) {
+      expect(row(id), id).toMatchObject({ baseLift, ratio: 1, confidence: 'high', mechanic: 'compound' });
+    }
   });
 
   it('AC22: lets the higher-confidence lift move a muscle more', () => {
@@ -285,10 +313,64 @@ describe('confidence', () => {
     expect(level([lift(medium, 1), lift(low, 3)])).toBeCloseTo(1.8, 8);
   });
 
-  it('stacks on the primary and secondary weights', () => {
-    // Triceps: pushdown, primary and medium, weighs 0.75. Bench, secondary and high, 0.5.
+  it('stacks on the role and type weights', () => {
+    // Triceps: pushdown, primary, medium and isolation, weighs 0.375. Bench, secondary, high and compound, 0.5.
     const detail = muscleDetail('triceps', [lift(BENCH, 3), lift(PUSHDOWN, 1)], 80);
-    expect(detail?.level).toBeCloseTo((0.5 * 3 + 0.75 * 1) / 1.25, 8);
+    expect(detail?.level).toBeCloseTo((0.5 * 3 + 0.375 * 1) / 0.875, 8);
+  });
+});
+
+describe('mechanic', () => {
+  it('weighs compound 1 and isolation 0.5', () => {
+    expect(MECHANIC_WEIGHT).toEqual({ compound: 1, isolation: 0.5 });
+  });
+
+  it('AC34: places a muscle twice as close to the compound lift as to the isolation lift', () => {
+    const compound = 'Close-Grip_Barbell_Bench_Press';
+    const isolation = 'EZ-Bar_Skullcrusher';
+    for (const id of [compound, isolation]) {
+      expect(row(id).primaryMuscles, id).toContain('triceps');
+      expect(row(id).confidence, id).toBe('medium');
+    }
+    expect([row(compound).mechanic, row(isolation).mechanic]).toEqual(['compound', 'isolation']);
+
+    const level = muscleDetail('triceps', [lift(compound, 3), lift(isolation, 0)], 80)?.level as number;
+    expect(level - 0).toBeCloseTo(2 * (3 - level), 8);
+  });
+});
+
+describe('levels', () => {
+  const only = (id: string, oneRepMaxKg: number, bodyweightKg = 80) =>
+    muscleDetail(row(id).primaryMuscles[0], [{ exerciseId: id, oneRepMaxKg }], bodyweightKg)?.level;
+
+  it('keeps the measured levels of a base lift', () => {
+    expect(only(BENCH, 66.7, 83)).toBe(0);
+    expect(only(BENCH, 128.3, 83)).toBe(4);
+  });
+
+  it('AC33: gives derived weighted rows on different base lifts the same level at the same multiple of their median', () => {
+    const rows = ['Incline_Dumbbell_Press', 'Barbell_Curl', 'Leg_Extensions', 'Seated_Cable_Rows', 'Dumbbell_Shoulder_Press'];
+    expect(new Set(rows.map((id) => row(id).baseLift)).size).toBe(rows.length);
+    for (const multiple of [0.6, 0.85, 1, 1.2, 1.6]) {
+      const levels = rows.map((id) => only(id, tableKg(row(id), 80, 2) * multiple));
+      for (const level of levels) expect(level).toBeCloseTo(levels[0] as number, 9);
+    }
+  });
+
+  it('spreads derived bodyweight rows like the bodyweight base lifts, narrower than weighted rows', () => {
+    const range = (id: string) => tableKg(row(id), 80, 4) / tableKg(row(id), 80, 0);
+    expect(row('Pushups').equipment).toBe('bodyweight');
+    expect(range('Pushups')).toBeCloseTo(range('Hanging_Leg_Raise'), 9);
+    expect(range('Pushups')).toBeLessThan(range('Barbell_Curl'));
+    expect(range('Barbell_Curl')).toBeGreaterThan(1.8);
+  });
+
+  it('gives a curl the weighted spread, though its base lift is a bodyweight lift', () => {
+    expect(row('Barbell_Curl').baseLift).toBe('Chin-Up');
+    expect(tableKg(row('Barbell_Curl'), 80, 4) / tableKg(row('Barbell_Curl'), 80, 0)).toBeCloseTo(
+      tableKg(row('Incline_Dumbbell_Press'), 80, 4) / tableKg(row('Incline_Dumbbell_Press'), 80, 0),
+      9,
+    );
   });
 });
 
@@ -296,11 +378,12 @@ describe('muscleDetail', () => {
   const lifts: LiftStrength[] = [lift(BENCH, 3), lift(PUSHDOWN, 1), { exerciseId: 'custom_abc', oneRepMaxKg: 40 }];
 
   it('gives the numbers shown on a tapped muscle', () => {
-    // Levels: chest 3, front-deltoids 3, triceps 1.8. Average 2.6.
+    // Levels: chest 3, front-deltoids 3, triceps (0.5 * 3 + 0.375 * 1) / 0.875 = 15/7. Average 51/21.
     const detail = muscleDetail('triceps', lifts, 80);
-    expect(detail?.levelName).toBe('Novice');
-    expect(detail?.average).toBeCloseTo(2.6, 8);
-    expect(detail?.score).toBeCloseTo(-0.8, 8);
+    expect(detail?.level).toBeCloseTo(15 / 7, 8);
+    expect(detail?.levelName).toBe('Intermediate');
+    expect(detail?.average).toBeCloseTo((3 + 3 + 15 / 7) / 3, 8);
+    expect(detail?.score).toBeCloseTo(15 / 7 - (3 + 3 + 15 / 7) / 3, 8);
     expect(detail?.lifts).toEqual([
       {
         exerciseId: BENCH,

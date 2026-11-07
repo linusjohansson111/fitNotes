@@ -7,7 +7,7 @@ On my iPhone, I log the strongest set of an exercise in seconds and see what to 
 Cardio; stretching, plyometrics, strongman, dynamic lifts driven by momentum, timed holds and anything without a real kg figure; custom exercises; sets or volume; workout plans or exercise suggestions; native or App Store builds; Watch, widgets or Apple Health; other users; history import; pounds; showing accuracy, ranges or uncertainty in the app; decay for time away; per-muscle load shares; a list of gym weights to maintain.
 
 ## Touches
-The app exists at v1.1.0, with the body map's abductors on the outer hip. This change is AC10, AC11, AC18 and AC26-AC35; every other criterion already passes and must keep passing.
+The app exists at v1.1.0, with the body map's abductors on the outer hip. This change is AC8, AC10, AC11, AC17, AC18 and AC26-AC35; every other criterion already passes and must keep passing.
 - `ExerciseDef` gains `mechanic: 'compound' | 'isolation'`, `perHand: boolean`, and `bodyweightShare: number` on bodyweight rows. `src/data/catalogue.json`, `src/data/gaps.json`, `scripts/build-exercises.mjs` and `scripts/validate-exercises.mjs` supply and check them.
 - `src/model/`: `predict`, `predictRaw`, `strengthHistory` and `oneRepMax` keep their signatures but read the fitted trend; the rules in `replay.ts` go. `ModelInput` gains `perHand`, `bodyweightShare` and `rackWeights` (weights logged on other exercises that share the rack). `roundToLoadable` snaps to real weights.
 - `src/balance/`: `muscleBalance` and `muscleDetail` use the new levels and weights. `src/app/queries.ts` passes the new inputs.
@@ -21,10 +21,10 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 - **Black UI with red, yellow or green accents; groups are Chest, Back, Shoulders, Arms, Legs, Core.** Colour and graphs lead, numbers support.
 - **Every entry is the workout's strongest set at maximum effort.** On a shared date the stronger set feeds the model. Deleted entries never do, because many were tests.
 - **Red = 5, yellow = 8, green = 11; reps 1-6 red, 7-9 yellow, 10+ green.** An exercise keeps its last entry's colour.
-- **Predictions come from a trend fitted to the data, not from rules.** Each session's e1RM is one datapoint. Log e1RM is fitted against session number, with recent sessions weighted by a half-life of about 6 sessions. Points above and below the trend count alike, so a run of weak sessions flattens and then lowers it, and an outlier only adjusts the fit. Miss streaks, the records rule, rebound and carry limits go. A low day pulls the next suggestion down more than before, which the owner accepts.
+- **Predictions come from a trend fitted to the data, not from rules.** Each session's e1RM is one datapoint. Log e1RM is fitted against session number, with recent sessions weighted by a half-life of about 6 sessions. Points above and below the trend count alike, so a run of weak sessions flattens and then lowers it, and an outlier only adjusts the fit. A user who trains one colour and always loads the suggestion stalls about one plate behind, because whole reps and 2.5 kg steps hide gains smaller than one rep; growth must show in the logs first, so the owner accepts this. Miss streaks, the records rule, rebound and carry limits go. A low day pulls the next suggestion down more than before, which the owner accepts.
 - **K, the % change per session, starts at 0% and data replaces it within about 3 sessions.** Growth must show in the logs first.
 - **Sessions, not calendar time.** The next suggestion is the fitted value at the next session, the same after a day or two months away. A break says nothing until a session is logged.
-- **One trend per exercise, plus a learned offset per colour that starts on [`1RM = w(1 + (r-1)^0.85 / (-2.55 + 4.58 ln w))`](https://arxiv.org/pdf/2603.17495v1.pdf).** Each colour has too little data for its own trend, and a set still moves its own colour most.
+- **One trend per exercise, plus a learned offset per colour that starts on [`1RM = w(1 + (r-1)^0.85 / (-2.55 + 4.58 ln w))`](https://arxiv.org/pdf/2603.17495v1.pdf).** Each colour has too little data for its own trend, and a set still moves its own colour most. K is learned within each colour, so a change of colour never reads as progress. Every colour takes the same per-session step, and a colour last trained long ago is carried forward on the current K, so in block training a set can move it more than its own colour.
 - **The graph's lines are the current fitted curve per colour, ending today at the next suggestion.** The slope you see is K.
 - **Suggestions snap to the nearest real weight.** A suggestion snaps to a grid from zero (kettlebells 4 kg, all else 2.5 kg) or to any weight already logged. Dumbbells, barbells and kettlebells share logged weights across exercises; machines, cables, other and bodyweight use that exercise's. The stepper moves by the grid step. A 33.5 kg dumbbell does not exist.
 - **Two-dumbbell and two-handle cable rows log per hand and say "Per hand".** The same flag decides when the curve doubles the load and the map halves it. One-dumbbell rows log the one dumbbell.
@@ -47,7 +47,7 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 5. When the logging form opens, the system shall start on predicted weight, target reps and today, with no sets field. A new exercise starts yellow, 8 reps, blank weight.
 6. When reps cross 6/7 or 9/10 in either direction, the system shall switch colour immediately, and change the weight only if the user hasn't edited it.
 7. When 80 kg x 8 is an exercise's first entry, the system shall show all three colours with red > yellow > green and no uncertainty state: 88 +/- 1 kg x 5 and 73.5 +/- 1 kg x 11 before rounding.
-8. When an entry is saved, the system shall update all three predictions, with its own colour moving by the largest percentage.
+8. When an entry is saved, the system shall update all three predictions and, in e1RM terms before the shared per-session step, move its own colour at least as much as the others when it is a new colour or every colour has data; while only one colour has data, all three move alike.
 9. When the latest entry has 4 reps, the system shall still show red as the weight for 5 reps.
 10. When an entry lands a given percentage above or below the trend, the system shall move the next prediction by equal and opposite percentages.
 11. When 60 days pass after an entry with nothing logged, the system shall predict the same weights as the day after it.
@@ -56,7 +56,7 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 14. When an entry is edited or deleted, the system shall recalculate predictions, graph and muscle map.
 15. When all logged lifts sit at one level, the system shall show every muscle with data as yellow at any level; a lagging muscle shall shift smoothly towards red, a stronger one towards green, muscles without data shall be grey, and tapping a muscle shall show its numbers.
 16. When any exercise in search is logged, the system shall predict for it and count it on the muscle map for each of its muscles.
-17. When a simulated 12-month log is replayed, the system shall have lower mean prediction error over the last 20 sessions than the first 5.
+17. When a simulated 12-month log that trains more than one colour is replayed, the system shall have lower mean prediction error over the last 20 sessions than the first 5.
 18. When `scripts/build-exercises.mjs` runs, the system shall fail if any row lacks an `ExerciseDef` field, names an unknown base lift, has a ratio that isn't positive, has a group that doesn't match its first primary muscle, or is a bodyweight row without a share in (0, 1].
 19. When the catalogue is read, the system shall hold no stretching, plyometric, strongman, dynamic, band, ball or timed-hold row, none of the rows dropped in `docs/catalogue-fixes.md`, and shall hold `Wide-Grip_Lat_Pulldown`, `Barbell_Deadlift`, `Dumbbell_Bicep_Curl`, `Incline_Dumbbell_Press`, `Seated_Cable_Rows`, Trap Bar Deadlift, Front Plate Raise, Donkey Calf Raises, `Clean_Deadlift`, `Overhead_Squat` and `Weighted_Crunches`.
 20. When `Dips_-_Chest_Version` or `Bench_Press_-_Powerlifting` is read, the system shall list chest as a primary muscle.
@@ -65,7 +65,7 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 23. When the map screen opens, the system shall show a "Powered by FitnessVolt" link to https://fitnessvolt.com/strength-standards/strength-data/.
 24. When `src/` and `scripts/` are searched for Strength Level, the system shall have no match, and `src/balance/standards.ts` and `scripts/fetch-standards.mjs` shall not exist.
 25. When an existing version 1 backup is restored, the system shall read it and restore every entry.
-26. When six sessions in a row land 2% under the prediction, the system shall predict lower than before them; when six land 2% over, higher.
+26. When six sessions in a row land 2% under the prediction on a log rising no faster than about 0.75% a session, the system shall predict lower than before them; when six land 2% over, higher. On a faster-rising log they flatten the trend first.
 27. When an exercise's first two sessions have equal e1RM, the system shall predict that same e1RM next.
 28. When one session lands far above the trend, the system shall raise the next prediction only part of the way to it.
 29. When Incline Dumbbell Press holds 40 x 4 and 37.5 x 8, the system shall show only weights on the 2.5 kg grid or already logged with dumbbells, and never 39.5 or 33.5.
