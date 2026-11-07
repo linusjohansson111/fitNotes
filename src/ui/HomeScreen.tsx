@@ -45,10 +45,18 @@ function Empty() {
 }
 
 export function HomeScreen({ queries }: { queries: Queries }) {
-  const groups = queries.logged(today());
+  const date = today();
+  const groups = queries.logged(date);
+  const workout = groups.length > 0 ? queries.nextWorkout(date) : null;
   return (
     <div className="screen">
       <header className="home-header">
+        {workout && (
+          <p className="next-workout">
+            <small>Next workout</small>
+            {workout}
+          </p>
+        )}
         <a href={href({ name: 'settings' })} aria-label="Settings">
           <SettingsIcon />
         </a>

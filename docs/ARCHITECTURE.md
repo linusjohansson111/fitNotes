@@ -12,7 +12,7 @@ stored records, so an edit or delete recalculates everything by replaying them.
 | `src/balance/` | `BASE_LIFTS`, `RAISES`, row levels, `muscleBalance` | domain, data |
 | `src/store/` | IndexedDB persistence and React bindings | domain |
 | `src/backup/` | Private GitHub repo backup, merge, restore | domain, store |
-| `src/app/` | Facades binding the pure modules to stored data | everything above |
+| `src/app/` | Facades binding the pure modules to stored data, and the next workout | everything above |
 | `src/ui/` | Screens and components | everything above |
 
 ## Module exports
@@ -53,6 +53,10 @@ interface AppData { entries: Entry[]; bodyweights: Bodyweight[]; customExercises
 useAppData(): AppData | null                                      // null until loaded
 addEntry, updateEntry, deleteEntry, setBodyweight, deleteBodyweight, setNote
 
+// src/app/queries.ts
+type Workout = 'Push' | 'Pull' | 'Legs'
+Queries.nextWorkout(date: ISODate): Workout | null               // null until a workout muscle is trained
+
 // src/backup/index.ts
 startBackup(): void
 stopBackup(): void
@@ -80,6 +84,13 @@ capped at the heavier ones so red ≥ yellow ≥ green.
 `predict` snaps each weight to the nearest real one: the grid from zero or any weight
 already logged, on this exercise or, for dumbbells, barbells and kettlebells, on another
 (`rackWeights`, built in `src/app/queries.ts`). It never shows a weight that leaves no load.
+
+## Next workout
+
+`nextWorkout` maps each tracked muscle to Push, Pull or Legs, leaving core and neck out. For
+each muscle it takes the last date an exercise listing it as primary was logged, then scores a
+workout by the median days since across the muscles of it that were ever trained. The highest
+score wins, a workout with none trained scores highest, and ties go Push, Pull, Legs.
 
 ## Exercise catalogue
 

@@ -181,6 +181,7 @@ async function run(browser) {
   await page.getByLabel('Home', { exact: true }).first().click();
   await shot(page, '3-home');
   check('AC4 home lists the exercise', (await homeRows(page)).some((row) => row.includes('Barbell Bench Press')));
+  check('AC36 home names the next workout', (await page.locator('.next-workout').innerText()).includes('Pull'));
 
   // AC5, AC6: the form starts on the prediction and follows the reps until edited.
   await page.locator('.row-log').first().click();

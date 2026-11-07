@@ -100,3 +100,48 @@ describe('buildQueries', () => {
     expect(buildQueries(data([])).bodyweightKg('2026-03-01')).toBe(80);
   });
 });
+
+describe('AC36: next workout', () => {
+  const ROWS = 'Seated_Cable_Rows';
+  const CURL = 'Dumbbell_Bicep_Curl';
+  const PUSHDOWN = 'Triceps_Pushdown_-_Rope_Attachment';
+  const REAR_DELT = 'Cable_Rear_Delt_Fly';
+  const next = (entries: Entry[]) => buildQueries(data(entries)).nextWorkout('2026-03-10');
+
+  it('picks the workout whose muscles have rested longest', () => {
+    const rotation = [
+      entry(BENCH, '2026-03-01', 80, 8),
+      entry(ROWS, '2026-03-02', 60, 8),
+      entry(SQUAT, '2026-03-03', 100, 8),
+    ];
+    expect(next(rotation)).toBe('Push');
+    expect(next([...rotation, entry(BENCH, '2026-03-04', 80, 8)])).toBe('Pull');
+  });
+
+  it("doesn't let one pull muscle on push day make pull look fresh", () => {
+    expect(
+      next([
+        entry(ROWS, '2026-03-01', 60, 8),
+        entry(CURL, '2026-03-01', 12, 8),
+        entry(BENCH, '2026-03-03', 80, 8),
+        entry(PUSHDOWN, '2026-03-03', 30, 8),
+        entry(REAR_DELT, '2026-03-03', 7.5, 11),
+        entry(SQUAT, '2026-03-06', 100, 8),
+      ]),
+    ).toBe('Pull');
+  });
+
+  it('puts a never-trained workout first and breaks ties in the order push, pull, legs', () => {
+    expect(next([entry(BENCH, '2026-03-09', 80, 8), entry(SQUAT, '2026-03-09', 100, 8)])).toBe('Pull');
+    expect(next([entry(SQUAT, '2026-03-09', 100, 8)])).toBe('Push');
+    expect(next([entry(BENCH, '2026-03-05', 80, 8), entry(ROWS, '2026-03-05', 60, 8), entry(SQUAT, '2026-03-05', 100, 8)])).toBe('Push');
+  });
+
+  it('counts primary muscles only, ignores core, and is null before any workout muscle', () => {
+    // Squats list lower back as secondary; it must not make pull look trained.
+    expect(next([entry(BENCH, '2026-03-01', 80, 8), entry(ROWS, '2026-03-02', 60, 8), entry(SQUAT, '2026-03-09', 100, 8)])).toBe('Push');
+    expect(next([entry('Barbell_Deadlift', '2026-03-09', 140, 5), entry(BENCH, '2026-03-09', 80, 8)])).toBe('Legs');
+    expect(next([entry('Hanging_Leg_Raise', '2026-03-09', 0, 12)])).toBeNull();
+    expect(next([])).toBeNull();
+  });
+});

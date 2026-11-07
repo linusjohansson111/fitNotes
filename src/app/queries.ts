@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { type MuscleDetail, muscleBalance, muscleDetail } from '../balance';
 import { EXERCISES } from '../data';
+import { daysBetween } from '../domain/date';
 import type {
   Bodyweight,
   Entry,
@@ -23,6 +24,15 @@ import {
 import { type AppData, useAppData } from '../store';
 
 const GROUPS: readonly Group[] = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core'];
+
+export type Workout = 'Push' | 'Pull' | 'Legs';
+
+/** The primary muscles each workout trains. Core and neck belong to none. */
+const WORKOUTS: Record<Workout, readonly Muscle[]> = {
+  Push: ['chest', 'front-deltoids', 'triceps'],
+  Pull: ['upper-back', 'lower-back', 'trapezius', 'back-deltoids', 'biceps', 'forearm'],
+  Legs: ['quadriceps', 'hamstring', 'gluteal', 'adductor', 'abductors', 'calves'],
+};
 
 /** Free weights share one rack across exercises; machines, cables and the rest do not. */
 const RACKS: readonly Equipment[] = ['dumbbell', 'barbell', 'kettlebell'];
@@ -50,12 +60,24 @@ export interface Queries {
   strengthHistory(exerciseId: string, asOf: ISODate): StrengthHistory;
   muscleBalance(date: ISODate): Record<Muscle, number | null>;
   muscleDetail(muscle: Muscle, date: ISODate): MuscleDetail | null;
+  /**
+   * The workout whose muscles have rested longest: the median of days since each muscle it
+   * trains was last a primary muscle, so one odd muscle can't swing it. A workout never
+   * trained comes first; ties go Push, Pull, Legs. Null until a workout muscle is trained.
+   */
+  nextWorkout(date: ISODate): Workout | null;
   /** The bodyweight in force on a date, or null when none has ever been recorded. */
   bodyweightKg(date: ISODate): number | null;
 }
 
 function newestFirst(a: Entry, b: Entry): number {
   return b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt;
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 function latestBodyweight(bodyweights: Bodyweight[], date: ISODate): number | null {
@@ -130,6 +152,24 @@ export function buildQueries(data: AppData): Queries {
     strengthHistory: (exerciseId, asOf) => strengthHistory(inputFor(exerciseId), asOf),
     muscleBalance: (date) => muscleBalance(liftsOn(date), bodyweightForMap(date)),
     muscleDetail: (muscle, date) => muscleDetail(muscle, liftsOn(date), bodyweightForMap(date)),
+    nextWorkout(date) {
+      const lastTrained = new Map<Muscle, ISODate>();
+      for (const [exerciseId, entries] of entriesById) {
+        for (const muscle of byId.get(exerciseId)?.primaryMuscles ?? []) {
+          const last = lastTrained.get(muscle);
+          if (!last || entries[0].date > last) lastTrained.set(muscle, entries[0].date);
+        }
+      }
+      const rests = (Object.keys(WORKOUTS) as Workout[]).map((workout) => {
+        const days = WORKOUTS[workout].flatMap((muscle) => {
+          const last = lastTrained.get(muscle);
+          return last ? [daysBetween(last, date)] : [];
+        });
+        return { workout, rest: days.length > 0 ? median(days) : Infinity };
+      });
+      if (rests.every(({ rest }) => rest === Infinity)) return null;
+      return rests.reduce((best, next) => (next.rest > best.rest ? next : best)).workout;
+    },
     bodyweightKg: (date) => latestBodyweight(data.bodyweights, date),
   };
 }

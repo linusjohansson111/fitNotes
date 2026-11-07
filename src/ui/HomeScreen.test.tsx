@@ -63,6 +63,11 @@ describe('AC4: home', () => {
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('#/settings');
   });
 
+  it('AC36: shows the next workout above the list', () => {
+    render(<HomeScreen queries={queries} />);
+    expect(document.querySelector('.next-workout')?.textContent).toBe('Next workoutPull');
+  });
+
   it('AC12: marks a negative next weight as assistance', () => {
     const assisted = queriesFor([entry(PULLUP, 1, -30, 8), entry(PULLUP, 2, -30, 8)]);
     render(<HomeScreen queries={assisted} />);
@@ -75,6 +80,7 @@ describe('AC4: home', () => {
     expect(screen.getByText('Nothing logged yet.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Add an exercise' }).getAttribute('href')).toBe('#/search');
     expect(screen.getByRole('link', { name: 'Restore from backup' }).getAttribute('href')).toBe('#/settings');
+    expect(screen.queryByText('Next workout')).toBeNull();
   });
 
   it('drops the restore link once backup is connected', () => {

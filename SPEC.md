@@ -1,18 +1,15 @@
 # SPEC: fitNotes
 
 ## Goal
-On my iPhone, I log the strongest set of an exercise in seconds and see what to lift next session, from a trend fitted to my own sessions rather than fixed rules. The muscle map measures each muscle's strength as fairly as it can: no lift makes a muscle easier to score strong than another, and compound lifts count most. The log screen leaves no doubt about which weight to enter.
+On my iPhone, I log the strongest set of an exercise in seconds and see what to lift next session, from a trend fitted to my own sessions rather than fixed rules. Home names the next workout, push, pull or legs, from the muscles that have rested longest. The muscle map measures each muscle's strength as fairly as it can: no lift makes a muscle easier to score strong than another, and compound lifts count most. The log screen leaves no doubt about which weight to enter.
 
 ## Out of scope
-Cardio; stretching, plyometrics, strongman, dynamic lifts driven by momentum, timed holds and anything without a real kg figure; custom exercises; sets or volume; workout plans or exercise suggestions; native or App Store builds; Watch, widgets or Apple Health; other users; history import; pounds; showing accuracy, ranges or uncertainty in the app; decay for time away; per-muscle load shares; a list of gym weights to maintain.
+Cardio; stretching, plyometrics, strongman, dynamic lifts driven by momentum, timed holds and anything without a real kg figure; custom exercises; sets or volume; workout plans or exercise suggestions beyond naming the next push, pull or legs workout; native or App Store builds; Watch, widgets or Apple Health; other users; history import; pounds; showing accuracy, ranges or uncertainty in the app; decay for time away; per-muscle load shares; a list of gym weights to maintain.
 
 ## Touches
-The app exists at v1.1.0, with the body map's abductors on the outer hip. This change is AC8, AC10, AC11, AC17, AC18 and AC26-AC35; every other criterion already passes and must keep passing.
-- `ExerciseDef` gains `mechanic: 'compound' | 'isolation'`, `perHand: boolean`, and `bodyweightShare: number` on bodyweight rows. `src/data/catalogue.json`, `src/data/gaps.json`, `scripts/build-exercises.mjs` and `scripts/validate-exercises.mjs` supply and check them.
-- `src/model/`: `predict`, `predictRaw`, `strengthHistory` and `oneRepMax` keep their signatures but read the fitted trend; the rules in `replay.ts` go. `ModelInput` gains `perHand`, `bodyweightShare` and `rackWeights` (weights logged on other exercises that share the rack). `roundToLoadable` snaps to real weights.
-- `src/balance/`: `muscleBalance` and `muscleDetail` use the new levels and weights. `src/app/queries.ts` passes the new inputs.
-- `src/ui/LogScreen.tsx`, `src/ui/logForm.ts`: the weight label comes from `perHand`; bodyweight rows show bodyweight read-only, and the sign button (`flipSign`) goes.
-- `docs/ARCHITECTURE.md`, `README.md` and `e2e/smoke.mjs` follow. The table at https://claude.ai/artifact/6Gf52dHv4QnwWDMvJaMgg7 is republished with every changed row.
+The app exists at v1.2.0. This change is AC36; every other criterion already passes and must keep passing.
+- `src/app/queries.ts` gains `nextWorkout`, and `src/ui/HomeScreen.tsx` shows it above the list.
+- `docs/ARCHITECTURE.md` and `e2e/smoke.mjs` follow.
 
 ## Decisions
 - **Home Screen web app, offline first, automatic cloud backup.** It builds on this Linux machine with no Apple fee, and [Apple's storage policy](https://webkit.org/?p=14403) gives no clear guarantee that local data lasts.
@@ -37,6 +34,7 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 - **A lift's weight on a muscle is role × confidence × type: primary 1, secondary 0.5; high 1, medium 0.75, low 0.5; compound 1, isolation 0.5.** Compounds predict strength better. `mechanic` comes from the source, and the rows the source leaves untagged are tagged by hand.
 - **No Strength Level data.** [Its policy](https://strengthlevel.com/data-licensing) forbids deriving ratios from its standards, so its values may not be used or consulted. The old tables stay in git history by the owner's choice.
 - **One release, from a branch, after the owner alone approves the republished table.** The release stops if a live backup entry has no row, and nothing is force-pushed.
+- **Home names the next workout: Push, Pull or Legs, whichever's primary muscles have rested longest by median.** Push is chest, front delts and triceps; Pull is upper and lower back, traps, rear delts, biceps and forearms; Legs is quads, hamstrings, glutes, adductors, abductors and calves. Core and neck count for none. Only primary muscles count, so squats don't train the lower back. The median keeps one odd muscle, such as rear delts on push day, from swinging it.
 - **No accuracy target.** Prediction error is checked outside the app and should fall as logs grow.
 
 ## Acceptance criteria
@@ -75,6 +73,7 @@ The app exists at v1.1.0, with the body map's abductors on the outer hip. This c
 33. When two derived weighted rows on different base lifts are logged at the same multiple of their own median 1RM, the system shall give both the same level.
 34. When a compound and an isolation lift with the same role and confidence give one muscle different levels, the system shall place that muscle's level twice as close to the compound's.
 35. When the catalogue is read, `Thigh_Adductor` shall list neither gluteal nor hamstring, and `Barbell_Squat` shall not list calves.
+36. When home opens with logged lifts, the system shall name the next workout as Push, Pull or Legs: the one whose trained primary muscles have the highest median days since last trained, a never-trained one first, ties in that order. With Seated Cable Rows and Dumbbell Bicep Curl logged on one day, Incline Dumbbell Press and Cable Rear Delt Fly two days later and Barbell Squat three days after that, it shall name Pull.
 
 ## Done when
-The owner has approved the republished table. Then, on an iPhone with the app installed and in airplane mode: log Pullups and see bodyweight read-only above one signed input; log Cable Rear Delt Fly at 7.5 kg "Per hand"; open Incline Dumbbell Press and see only real dumbbell weights; tap biceps on the muscle map and see its numbers. Reconnect and confirm the backup holds every entry.
+On the iPhone, after v1.3.0 deploys, home shows "Next workout" above the list, naming the workout whose muscles have rested longest.

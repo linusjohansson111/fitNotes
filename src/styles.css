@@ -184,6 +184,20 @@ ul {
   justify-content: flex-end;
   margin-right: -10px;
 }
+.next-workout {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 auto 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.next-workout small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
 .home-header a {
   display: flex;
   align-items: center;
