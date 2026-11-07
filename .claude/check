@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Fast checks: types and unit tests. Changes no tracked files.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+npx tsc --noEmit
+npx vitest run
