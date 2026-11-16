@@ -44,23 +44,14 @@
 .ins-line {
   fill: none;
   stroke: var(--ins-colour);
-  stroke-width: 1.5;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.45;
-}
-.ins-line.ins-lead {
-  stroke-width: 2;
-  opacity: 1;
 }
 .ins-dot {
   fill: var(--ins-colour);
-  opacity: 0.6;
-}
-.ins-dot.ins-lead {
   stroke: var(--bg);
   stroke-width: 1.5;
-  opacity: 1;
 }
 .ins-ranges {
   display: flex;
@@ -134,30 +125,24 @@
   height: 44px;
   color: var(--text);
 }
-.ins-weights {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.ins-suggestion {
   margin-top: 16px;
 }
-.ins-weight {
-  color: var(--ins-colour);
-  opacity: 0.68;
-}
-.ins-weight--now {
-  opacity: 1;
-}
-.ins-weight-kg {
+.ins-suggestion-label {
   display: block;
-  font-size: 30px;
-  font-weight: 600;
-  line-height: 1.1;
-}
-.ins-weight-reps {
-  display: block;
-  margin-top: 2px;
   color: var(--muted);
   font-size: 14px;
+}
+.ins-suggestion-weight {
+  display: block;
+  color: var(--muted);
+  font-size: 17px;
+}
+.ins-suggestion-kg {
+  color: var(--ins-colour);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.1;
 }
 .ins-log {
   display: flex;

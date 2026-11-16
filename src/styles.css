@@ -234,7 +234,7 @@ ul {
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
-.row-next {
+.row-weight {
   flex: none;
   display: flex;
   flex-direction: column;
@@ -244,7 +244,7 @@ ul {
   font-weight: 600;
   line-height: 1;
 }
-.row-next small {
+.row-weight small {
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 500;
@@ -319,6 +319,12 @@ ul {
   min-height: 96px;
   color: var(--accent);
   font-size: 72px;
+}
+.log-suggestion {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
 }
 .log-reps {
   min-height: 64px;

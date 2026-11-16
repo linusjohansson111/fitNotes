@@ -6,17 +6,16 @@ import { GraphIcon, SettingsIcon } from './icons';
 import { href } from './nav';
 import { SearchLink } from './SearchLink';
 
-function Row({ exercise, next }: LoggedExercise) {
+/** The last weight lifted, in that entry's colour. */
+function Row({ exercise, lastWeightKg }: LoggedExercise) {
   return (
     <li className="row" data-colour={exercise.colour}>
       <a className="row-log" href={href({ name: 'log', exerciseId: exercise.id })}>
         <span className="row-name">{exercise.name}</span>
-        {next !== null && (
-          <span className="row-next">
-            {next < 0 && <small>assistance</small>}
-            {formatKg(next)}
-          </span>
-        )}
+        <span className="row-weight">
+          {lastWeightKg < 0 && <small>assistance</small>}
+          {formatKg(lastWeightKg)}
+        </span>
       </a>
       <a
         className="row-history"
@@ -46,7 +45,7 @@ function Empty() {
 
 export function HomeScreen({ queries }: { queries: Queries }) {
   const date = today();
-  const groups = queries.logged(date);
+  const groups = queries.logged();
   const workout = groups.length > 0 ? queries.nextWorkout(date) : null;
   return (
     <div className="screen">

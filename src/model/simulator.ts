@@ -1,5 +1,5 @@
-import { COLOURS, TARGET_REPS, colourForReps } from '../domain/colour';
-import type { Colour, Entry, Prediction } from '../domain/types';
+import { TARGET_REPS } from '../domain/colour';
+import type { Entry } from '../domain/types';
 import { weightFor } from './curve';
 import { predict, predictRaw } from './index';
 import { barbell, on, set } from './testing';
@@ -24,6 +24,9 @@ export function gaussian(random: Random): number {
   return Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
 }
 
+/** Log deviation from the starting curve at a rep count, as [reps, deviation] pairs. */
+type RepCurve = readonly (readonly [reps: number, deviation: number])[];
+
 export interface Persona {
   name: string;
   /** True e1RM on day one, on the starting curve. */
@@ -31,27 +34,22 @@ export interface Persona {
   /** True log-time growth: ln S = ln S0 + growth * ln(1 + t / tau). */
   growth: number;
   tau: number;
-  /** Own rep curve: log deviation from the starting curve at each colour's target reps. */
-  curve: Prediction;
+  /** Own rep curve, so a set far from 8 reps carries the starting curve's error. */
+  curve: RepCurve;
   /** Standard deviation of the log day effect. */
   noise: number;
-  /** Share of a session's gain reaching the colours not trained. */
-  spillover: number;
-  colourFor: (session: number, random: Random) => Colour;
-  layoff?: { afterDay: number; days: number; loss: Prediction };
+  layoff?: { afterDay: number; days: number; loss: number };
 }
 
 export interface SimulatedSession {
   session: number;
   day: number;
-  /** Colour the user set out to train. */
-  colour: Colour;
-  /** Raw prediction for that colour; null at the first session. */
+  /** Raw prediction for 8 reps; null at the first session. */
   predicted: number | null;
-  /** What the user could really lift for that colour's target reps that day. */
+  /** What the user could really lift for 8 reps that day. */
   actual: number;
-  /** Colour of the reps actually reached. */
-  logged: Colour;
+  /** Reps actually reached on the loaded weight. */
+  reps: number;
 }
 
 const SESSIONS_END_DAY = 365;
@@ -64,56 +62,52 @@ function trainingGap(random: Random): number {
   return roll < 0.55 ? 3 : 4;
 }
 
-/** Log deviation at any rep count, linear between the colours' target reps. */
-function deviationAt(reps: number, deviation: Prediction): number {
-  if (reps <= TARGET_REPS.red) return deviation.red;
-  if (reps >= TARGET_REPS.green) return deviation.green;
-  const [low, high]: Colour[] = reps <= TARGET_REPS.yellow ? ['red', 'yellow'] : ['yellow', 'green'];
-  const share = (reps - TARGET_REPS[low]) / (TARGET_REPS[high] - TARGET_REPS[low]);
-  return deviation[low] + share * (deviation[high] - deviation[low]);
+/** Linear between the curve's points, and its nearest point beyond them. */
+function deviationAt(reps: number, curve: RepCurve): number {
+  const next = curve.findIndex(([at]) => at >= reps);
+  if (next === 0) return curve[0][1];
+  if (next === -1) return curve[curve.length - 1][1];
+  const [[lowReps, low], [highReps, high]] = [curve[next - 1], curve[next]];
+  return low + ((reps - lowReps) / (highReps - lowReps)) * (high - low);
 }
 
 /**
- * Replays a year of one persona, loading the app's rounded prediction every session and
- * taking the set to the last whole rep.
+ * Replays a year of one persona aiming at 8 reps: loading the app's rounded suggestion
+ * every session and taking the set to the last whole rep, so the reps reached vary
+ * around 8 with the day and with growth.
  */
 export function simulate(persona: Persona, seed: number): SimulatedSession[] {
   const random = seededRandom(seed);
-  const deviation = { ...persona.curve };
-  const loss: Prediction = { red: 0, yellow: 0, green: 0 };
   const sessions: SimulatedSession[] = [];
   const entries: Entry[] = [];
+  let gained = 0;
+  let loss = 0;
   let layoffTaken = false;
   let day = 0;
   let age = 0;
 
   for (let session = 0; day < SESSIONS_END_DAY; session++) {
-    const colour = persona.colourFor(session, random);
     const dayEffect = gaussian(random) * persona.noise;
     const capability = (reps: number) =>
-      weightFor(persona.startStrength, reps) *
-      Math.exp(deviationAt(reps, deviation) - deviationAt(reps, loss) + dayEffect);
+      weightFor(persona.startStrength, reps) * Math.exp(deviationAt(reps, persona.curve) + gained - loss + dayEffect);
 
     const input = barbell(...entries);
-    const predicted = predictRaw(input, on(day))?.[colour] ?? null;
-    const load = predict(input, on(day))?.[colour] ?? Math.round(capability(TARGET_REPS[colour]) / LOADING_STEP) * LOADING_STEP;
+    const predicted = predictRaw(input, on(day));
+    const load = predict(input, on(day)) ?? Math.round(capability(TARGET_REPS) / LOADING_STEP) * LOADING_STEP;
 
     let reps = 1;
     while (reps < 30 && capability(reps + 1) >= load) reps++;
     entries.push(set(day, load, reps));
-    sessions.push({ session, day, colour, predicted, actual: capability(TARGET_REPS[colour]), logged: colourForReps(reps) });
+    sessions.push({ session, day, predicted, actual: capability(TARGET_REPS), reps });
 
     const layoff = persona.layoff;
     const pause: Persona['layoff'] | null = layoff !== undefined && !layoffTaken && day >= layoff.afterDay ? layoff : null;
     const gap = pause ? pause.days : trainingGap(random);
     const trainingDays = Math.min(gap, 14);
-    const gain =
+    gained +=
       persona.growth *
       (Math.log(1 + (age + trainingDays) / persona.tau) - Math.log(1 + age / persona.tau));
-    for (const c of COLOURS) {
-      deviation[c] += c === colour ? gain : persona.spillover * gain;
-      loss[c] = pause ? pause.loss[c] : loss[c] * LOSS_KEPT_PER_SESSION;
-    }
+    loss = pause ? pause.loss : loss * LOSS_KEPT_PER_SESSION;
     layoffTaken ||= pause !== null;
     age += trainingDays;
     day += gap;
@@ -128,55 +122,41 @@ export function percentageErrors(sessions: SimulatedSession[]): number[] {
   );
 }
 
-const rotation =
-  (...order: Colour[]) =>
-  (session: number) =>
-    order[session % order.length];
-
-const blocks =
-  (sessionsEach: number, ...order: Colour[]) =>
-  (session: number) =>
-    order[Math.floor(session / sessionsEach) % order.length];
-
-function mostlyYellow(_session: number, random: Random): Colour {
-  const roll = random();
-  if (roll < 0.7) return 'yellow';
-  return roll < 0.85 ? 'red' : 'green';
-}
-
-const LOW_REP_CURVE: Prediction = { red: 0.03, yellow: 0, green: -0.04 };
-const HIGH_REP_CURVE: Prediction = { red: -0.03, yellow: 0, green: 0.03 };
+const LOW_REP_CURVE: RepCurve = [
+  [5, 0.03],
+  [8, 0],
+  [11, -0.04],
+];
+const HIGH_REP_CURVE: RepCurve = [
+  [5, -0.03],
+  [8, 0],
+  [11, 0.03],
+];
 
 export const PERSONAS: Persona[] = [
   {
-    name: 'strong at low reps, rotates colours',
+    name: 'strong at low reps',
     startStrength: 100,
     growth: 0.08,
     tau: 30,
     curve: LOW_REP_CURVE,
     noise: 0.015,
-    spillover: 0.7,
-    colourFor: rotation('yellow', 'red', 'green'),
   },
   {
-    name: 'strong at high reps, rotates colours',
+    name: 'strong at high reps',
     startStrength: 70,
     growth: 0.1,
     tau: 40,
     curve: HIGH_REP_CURVE,
     noise: 0.012,
-    spillover: 0.7,
-    colourFor: rotation('green', 'yellow', 'red'),
   },
   {
-    name: 'mostly yellow, noisy days',
+    name: 'noisy days, reps swing widely',
     startStrength: 130,
     growth: 0.05,
     tau: 30,
     curve: LOW_REP_CURVE,
-    noise: 0.02,
-    spillover: 0.6,
-    colourFor: mostlyYellow,
+    noise: 0.03,
   },
   {
     name: 'eight week layoff',
@@ -185,18 +165,6 @@ export const PERSONAS: Persona[] = [
     tau: 30,
     curve: LOW_REP_CURVE,
     noise: 0.015,
-    spillover: 0.7,
-    colourFor: rotation('yellow', 'red', 'green'),
-    layoff: { afterDay: 150, days: 56, loss: { red: 0.04, yellow: 0.06, green: 0.09 } },
-  },
-  {
-    name: 'switches colour every six weeks',
-    startStrength: 100,
-    growth: 0.08,
-    tau: 30,
-    curve: LOW_REP_CURVE,
-    noise: 0.015,
-    spillover: 0.6,
-    colourFor: blocks(12, 'yellow', 'red', 'green'),
+    layoff: { afterDay: 150, days: 56, loss: 0.06 },
   },
 ];

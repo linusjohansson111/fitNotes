@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Colour, Entry, Prediction } from '../domain/types';
+import type { Colour, Entry } from '../domain/types';
 import {
   type LogFormAction,
   type LogFormContext,
@@ -15,8 +15,6 @@ import {
 } from './logForm';
 
 const TODAY = '2026-03-10';
-const PREDICTION: Prediction = { red: 90, yellow: 80, green: 70 };
-const LATER: Prediction = { red: 85, yellow: 75, green: 65 };
 const BARBELL: LogFormContext = { equipment: 'barbell', bodyweightShare: 1, bodyweightKg: null, today: TODAY };
 const BODYWEIGHT: LogFormContext = { equipment: 'bodyweight', bodyweightShare: 1, bodyweightKg: 80, today: TODAY };
 
@@ -36,13 +34,14 @@ function run(state: LogFormState, ...actions: LogFormAction[]): LogFormState {
   return actions.reduce(logFormReducer, state);
 }
 
-function opened(colour: Colour, prediction: Prediction | null = PREDICTION): LogFormState {
-  return newLogForm(colour, TODAY, prediction);
+/** A new log, on a last weight of 80 kg unless given. */
+function opened(lastWeightKg: number | null = 80): LogFormState {
+  return newLogForm(lastWeightKg, TODAY);
 }
 
 /** A form sitting at `reps`, weight untouched. */
-function atReps(reps: number, prediction: Prediction | null = PREDICTION): LogFormState {
-  return run(opened(COLOUR_OF_REPS[reps], prediction), { type: 'reps', text: String(reps) });
+function atReps(reps: number, lastWeightKg: number | null = 80): LogFormState {
+  return run(opened(lastWeightKg), { type: 'reps', text: String(reps) });
 }
 
 const entry: Entry = {
@@ -55,27 +54,16 @@ const entry: Entry = {
 };
 
 describe('AC5: opening the form', () => {
-  it.each<[Colour, number, string]>([
-    ['red', 5, '90'],
-    ['yellow', 8, '80'],
-    ['green', 11, '70'],
-  ])('starts on %s with its target reps and predicted weight', (colour, reps, weight) => {
-    const state = opened(colour);
-    expect(state).toMatchObject({ colour, repsText: String(reps), weightText: weight, date: TODAY });
-    expect(state.weightEdited).toBe(false);
+  it('starts on the last weight, 8 reps and today, yellow', () => {
+    expect(opened(82.5)).toEqual({ date: TODAY, repsText: '8', weightText: '82.5', bodyweightText: '', colour: 'yellow' });
   });
 
   it('starts a new exercise yellow, 8 reps, blank weight', () => {
-    const state = opened('yellow', null);
-    expect(state).toMatchObject({ colour: 'yellow', repsText: '8', weightText: '' });
+    expect(opened(null)).toMatchObject({ colour: 'yellow', repsText: '8', weightText: '' });
   });
 
-  it('AC9: a latest entry of 4 reps still opens on red at 5 reps', () => {
-    expect(opened('red')).toMatchObject({ repsText: '5', weightText: '90' });
-  });
-
-  it('shows a negative prediction with a real minus sign', () => {
-    const state = opened('red', { red: -12.5, yellow: -20, green: -27.5 });
+  it('shows a negative last weight with a real minus sign', () => {
+    const state = opened(-12.5);
     expect(state.weightText).toBe('−12.5');
     expect(isAssistance(state)).toBe(true);
   });
@@ -98,27 +86,19 @@ describe('AC6: reps crossing a colour boundary', () => {
   describe.each(crossings)('from %i to %i', (from, to) => {
     const colour = COLOUR_OF_REPS[to];
 
-    it('switches colour and takes the prediction when the weight is untouched', () => {
+    it('switches colour and leaves the weight', () => {
       const state = run(atReps(from), { type: 'reps', text: String(to) });
-      expect(state.colour).toBe(colour);
-      expect(state.weightText).toBe(String(PREDICTION[colour]));
-      expect(state.weightEdited).toBe(false);
+      expect(state).toMatchObject({ colour, weightText: '80' });
     });
 
     it('switches colour and keeps a typed weight', () => {
-      const state = run(
-        atReps(from),
-        { type: 'weight', text: '77' },
-        { type: 'reps', text: String(to) },
-      );
-      expect(state.colour).toBe(colour);
-      expect(state.weightText).toBe('77');
+      const state = run(atReps(from), { type: 'weight', text: '77' }, { type: 'reps', text: String(to) });
+      expect(state).toMatchObject({ colour, weightText: '77' });
     });
 
-    it('switches colour and stays blank without a prediction', () => {
+    it('switches colour and stays blank for a new exercise', () => {
       const state = run(atReps(from, null), { type: 'reps', text: String(to) });
-      expect(state.colour).toBe(colour);
-      expect(state.weightText).toBe('');
+      expect(state).toMatchObject({ colour, weightText: '' });
     });
   });
 
@@ -129,9 +109,7 @@ describe('AC6: reps crossing a colour boundary', () => {
     [10, -1, 'yellow'],
   ] as const)('stepping from %i by %i switches to %s', (from, delta, colour) => {
     const state = run(atReps(from), { type: 'stepReps', delta });
-    expect(state.colour).toBe(colour);
-    expect(state.repsText).toBe(String(from + delta));
-    expect(state.weightText).toBe(String(PREDICTION[colour]));
+    expect(state).toMatchObject({ colour, repsText: String(from + delta), weightText: '80' });
   });
 
   it.each([
@@ -149,17 +127,8 @@ describe('AC6: reps crossing a colour boundary', () => {
   });
 
   it('keeps a stepped weight across a crossing', () => {
-    const state = run(
-      atReps(6),
-      { type: 'stepWeight', delta: 2.5, floor: 0 },
-      { type: 'reps', text: '7' },
-    );
-    expect(state).toMatchObject({ colour: 'yellow', weightText: '92.5' });
-  });
-
-  it('returns to the prediction when reps cross back over an untouched weight', () => {
-    const state = run(atReps(6), { type: 'reps', text: '7' }, { type: 'reps', text: '6' });
-    expect(state).toMatchObject({ colour: 'red', weightText: '90' });
+    const state = run(atReps(6), { type: 'stepWeight', delta: 2.5, floor: 0 }, { type: 'reps', text: '7' });
+    expect(state).toMatchObject({ colour: 'yellow', weightText: '82.5' });
   });
 
   it('keeps the last colour while reps are blank or invalid, and catches up after', () => {
@@ -167,7 +136,7 @@ describe('AC6: reps crossing a colour boundary', () => {
       expect(run(atReps(8), { type: 'reps', text })).toMatchObject({ colour: 'yellow', weightText: '80' });
     }
     expect(run(atReps(8), { type: 'reps', text: '' }, { type: 'reps', text: '1' }, { type: 'reps', text: '12' }))
-      .toMatchObject({ colour: 'green', weightText: '70', repsText: '12' });
+      .toMatchObject({ colour: 'green', weightText: '80', repsText: '12' });
   });
 });
 
@@ -187,57 +156,30 @@ describe('reps', () => {
 });
 
 describe('date', () => {
-  it('takes the prediction for the new date while the weight is untouched', () => {
-    const state = run(opened('yellow'), { type: 'date', date: '2026-02-01', prediction: LATER });
-    expect(state).toMatchObject({ date: '2026-02-01', weightText: '75' });
-    expect(state.weightEdited).toBe(false);
-  });
-
-  it('uses the new prediction on the next crossing', () => {
-    const state = run(
-      opened('yellow'),
-      { type: 'date', date: '2026-02-01', prediction: LATER },
-      { type: 'reps', text: '4' },
-    );
-    expect(state.weightText).toBe('85');
-  });
-
-  it('keeps an edited weight', () => {
-    const state = run(
-      opened('yellow'),
-      { type: 'weight', text: '77' },
-      { type: 'date', date: '2026-02-01', prediction: LATER },
-    );
-    expect(state).toMatchObject({ date: '2026-02-01', weightText: '77' });
-  });
-
-  it('goes blank for a date before any entry, and returns with the prediction', () => {
-    const before = run(opened('yellow'), { type: 'date', date: '2020-01-01', prediction: null });
-    expect(before.weightText).toBe('');
-    expect(run(before, { type: 'date', date: TODAY, prediction: PREDICTION }).weightText).toBe('80');
+  it('takes the new date and leaves the weight', () => {
+    expect(run(opened(), { type: 'date', date: '2026-02-01' })).toMatchObject({ date: '2026-02-01', weightText: '80' });
   });
 
   it('ignores a cleared date', () => {
-    expect(run(opened('yellow'), { type: 'date', date: '', prediction: null })).toEqual(opened('yellow'));
+    expect(run(opened(), { type: 'date', date: '' })).toEqual(opened());
   });
 });
 
 describe('weight', () => {
-  it('marks a typed weight as edited, even when cleared', () => {
-    const cleared = run(opened('yellow'), { type: 'weight', text: '' });
-    expect(cleared).toMatchObject({ weightText: '', weightEdited: true });
+  it('keeps a cleared weight blank across a crossing', () => {
+    const cleared = run(opened(), { type: 'weight', text: '' });
     expect(run(cleared, { type: 'reps', text: '4' }).weightText).toBe('');
   });
 
   it('steps from the current weight, and from zero when blank', () => {
-    expect(run(opened('yellow'), { type: 'stepWeight', delta: 2.5, floor: 0 }).weightText).toBe('82.5');
-    expect(run(opened('yellow'), { type: 'stepWeight', delta: -2.5, floor: 0 }).weightText).toBe('77.5');
-    expect(run(opened('yellow', null), { type: 'stepWeight', delta: 2.5, floor: 0 }).weightText).toBe('2.5');
+    expect(run(opened(), { type: 'stepWeight', delta: 2.5, floor: 0 }).weightText).toBe('82.5');
+    expect(run(opened(), { type: 'stepWeight', delta: -2.5, floor: 0 }).weightText).toBe('77.5');
+    expect(run(opened(null), { type: 'stepWeight', delta: 2.5, floor: 0 }).weightText).toBe('2.5');
   });
 
   it('steps from a decimal comma', () => {
     const state = run(
-      opened('yellow'),
+      opened(),
       { type: 'weight', text: '22,5' },
       { type: 'stepWeight', delta: 2.5, floor: 0 },
     );
@@ -245,9 +187,9 @@ describe('weight', () => {
   });
 
   it('does not step to or below the floor', () => {
-    const low = run(opened('yellow'), { type: 'weight', text: '2.5' });
+    const low = run(opened(), { type: 'weight', text: '2.5' });
     expect(run(low, { type: 'stepWeight', delta: -2.5, floor: 0 })).toBe(low);
-    const blank = opened('yellow', null);
+    const blank = opened(null);
     expect(run(blank, { type: 'stepWeight', delta: -2.5, floor: 0 })).toBe(blank);
   });
 
@@ -267,13 +209,13 @@ describe('AC12, AC31: one signed input', () => {
     ['12,5', 12.5],
     ['+5', 5],
   ])('takes %s as %f kg', (text, kg) => {
-    const state = run(opened('yellow', null), { type: 'weight', text });
+    const state = run(opened(null), { type: 'weight', text });
     expect(submission(state, BODYWEIGHT)?.weightKg).toBe(kg);
     expect(isAssistance(state)).toBe(kg < 0);
   });
 
   it('holds a lone minus until digits are typed', () => {
-    const state = run(opened('yellow', null), { type: 'weight', text: '-' });
+    const state = run(opened(null), { type: 'weight', text: '-' });
     expect(isAssistance(state)).toBe(true);
     expect(submission(state, BODYWEIGHT)).toBeNull();
     expect(submission(run(state, { type: 'weight', text: '-20' }), BODYWEIGHT)?.weightKg).toBe(-20);
@@ -281,7 +223,7 @@ describe('AC12, AC31: one signed input', () => {
 
   it('steps down through zero into assistance', () => {
     const state = run(
-      opened('yellow', null),
+      opened(null),
       { type: 'weight', text: '0' },
       { type: 'stepWeight', delta: -2.5, floor: -80 },
     );
@@ -290,7 +232,7 @@ describe('AC12, AC31: one signed input', () => {
   });
 
   it('steps assistance up towards zero', () => {
-    const state = run(opened('red', { red: -2.5, yellow: -10, green: -15 }), {
+    const state = run(opened(-2.5), {
       type: 'stepWeight',
       delta: 2.5,
       floor: -80,
@@ -304,22 +246,12 @@ describe('AC12, AC31: one signed input', () => {
 describe('editing an entry', () => {
   const state = editLogForm(entry);
 
-  it('starts from the entry, on its colour, as edited', () => {
-    expect(state).toMatchObject({
-      date: '2026-03-01',
-      repsText: '4',
-      weightText: '82.5',
-      colour: 'red',
-      weightEdited: true,
-    });
+  it('starts from the entry, on its colour', () => {
+    expect(state).toMatchObject({ date: '2026-03-01', repsText: '4', weightText: '82.5', colour: 'red' });
   });
 
   it('keeps the weight across a crossing and a date change', () => {
-    const next = run(
-      state,
-      { type: 'reps', text: '10' },
-      { type: 'date', date: '2026-03-02', prediction: PREDICTION },
-    );
+    const next = run(state, { type: 'reps', text: '10' }, { type: 'date', date: '2026-03-02' });
     expect(next).toMatchObject({ colour: 'green', weightText: '82.5' });
   });
 
@@ -332,7 +264,7 @@ describe('editing an entry', () => {
 
 describe('submission', () => {
   it('returns the parsed entry', () => {
-    expect(submission(opened('yellow'), BARBELL)).toEqual({
+    expect(submission(opened(), BARBELL)).toEqual({
       date: TODAY,
       weightKg: 80,
       reps: 8,
@@ -341,7 +273,7 @@ describe('submission', () => {
   });
 
   it('parses a decimal comma', () => {
-    const state = run(opened('yellow'), { type: 'weight', text: '62,5' });
+    const state = run(opened(), { type: 'weight', text: '62,5' });
     expect(submission(state, BARBELL)?.weightKg).toBe(62.5);
   });
 
@@ -353,37 +285,37 @@ describe('submission', () => {
     ['blank reps', { type: 'reps', text: '' }],
     ['zero reps', { type: 'reps', text: '0' }],
     ['fractional reps', { type: 'reps', text: '8.5' }],
-    ['a future date', { type: 'date', date: '2026-03-11', prediction: PREDICTION }],
+    ['a future date', { type: 'date', date: '2026-03-11' }],
   ] as [string, LogFormAction][])('refuses %s', (_name, action) => {
-    expect(submission(run(opened('yellow'), action), BARBELL)).toBeNull();
+    expect(submission(run(opened(), action), BARBELL)).toBeNull();
   });
 
   it('allows today and past dates', () => {
-    const past = run(opened('yellow'), { type: 'date', date: '2025-01-01', prediction: PREDICTION });
+    const past = run(opened(), { type: 'date', date: '2025-01-01' });
     expect(submission(past, BARBELL)?.date).toBe('2025-01-01');
   });
 
   describe('bodyweight exercises', () => {
     it('accepts zero as a weight', () => {
-      expect(submission(run(opened('yellow', null), { type: 'weight', text: '0' }), BODYWEIGHT)?.weightKg).toBe(0);
+      expect(submission(run(opened(null), { type: 'weight', text: '0' }), BODYWEIGHT)?.weightKg).toBe(0);
     });
 
     it('turns a typed minus zero into plain zero', () => {
-      const state = run(opened('yellow', null), { type: 'weight', text: '−0' });
+      const state = run(opened(null), { type: 'weight', text: '−0' });
       expect(Object.is(submission(state, BODYWEIGHT)?.weightKg, 0)).toBe(true);
     });
 
     it('refuses assistance that reaches the share of bodyweight moved', () => {
-      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−80' }), BODYWEIGHT)).toBeNull();
-      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−79' }), BODYWEIGHT)?.weightKg).toBe(-79);
+      expect(submission(run(opened(null), { type: 'weight', text: '−80' }), BODYWEIGHT)).toBeNull();
+      expect(submission(run(opened(null), { type: 'weight', text: '−79' }), BODYWEIGHT)?.weightKg).toBe(-79);
       const pushUps = { ...BODYWEIGHT, bodyweightShare: 0.65 };
-      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−52' }), pushUps)).toBeNull();
-      expect(submission(run(opened('yellow', null), { type: 'weight', text: '−51' }), pushUps)?.weightKg).toBe(-51);
+      expect(submission(run(opened(null), { type: 'weight', text: '−52' }), pushUps)).toBeNull();
+      expect(submission(run(opened(null), { type: 'weight', text: '−51' }), pushUps)?.weightKg).toBe(-51);
     });
 
     describe('with no bodyweight recorded', () => {
       const context: LogFormContext = { ...BODYWEIGHT, bodyweightKg: null };
-      const typed = run(opened('yellow', null), { type: 'weight', text: '10' });
+      const typed = run(opened(null), { type: 'weight', text: '10' });
 
       it('asks for bodyweight only then', () => {
         expect(needsBodyweight(context)).toBe(true);

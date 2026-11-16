@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COLOURS } from '../domain/colour';
-import type { Bodyweight, Entry, Equipment, Prediction } from '../domain/types';
+import type { Bodyweight, Entry, Equipment } from '../domain/types';
 import { oneRepMax, predict, predictRaw, strengthHistory } from './index';
 import type { ModelInput } from './fit';
 import { bodyweightOn } from './load';
@@ -50,21 +49,6 @@ function forEachLog(run: (input: ModelInput) => void): void {
 }
 
 describe('invariants across random logs', () => {
-  it('keeps red >= yellow >= green at every point of the graph, raw and rounded', () => {
-    forEachLog((input) => {
-      const lastDay = dayOf(input.entries.at(-1) as Entry);
-      for (const prediction of [predictRaw(input, on(lastDay)), predict(input, on(lastDay))] as Prediction[]) {
-        expect(prediction.red).toBeGreaterThanOrEqual(prediction.yellow);
-        expect(prediction.yellow).toBeGreaterThanOrEqual(prediction.green);
-      }
-      const { lines } = strengthHistory(input, on(lastDay));
-      lines.red.forEach((point, i) => {
-        expect(point.kg).toBeGreaterThanOrEqual(lines.yellow[i].kg);
-        expect(lines.yellow[i].kg).toBeGreaterThanOrEqual(lines.green[i].kg);
-      });
-    });
-  });
-
   it('AC11: predicts the same however long after the last session', () => {
     forEachLog((input) => {
       const lastDay = dayOf(input.entries.at(-1) as Entry);
@@ -78,9 +62,8 @@ describe('invariants across random logs', () => {
     forEachLog((input) => {
       const step = input.equipment === 'kettlebell' ? 4 : 2.5;
       const real = new Set([...input.entries.map(({ weightKg }) => weightKg), ...input.rackWeights]);
-      for (const weight of Object.values(predict(input, on(1000)) as Prediction)) {
-        expect(Math.abs(weight / step - Math.round(weight / step)) < 1e-9 || real.has(weight)).toBe(true);
-      }
+      const weight = predict(input, on(1000)) as number;
+      expect(Math.abs(weight / step - Math.round(weight / step)) < 1e-9 || real.has(weight)).toBe(true);
     });
   });
 
@@ -92,9 +75,7 @@ describe('invariants across random logs', () => {
         if (!predict(input, on(day))) continue;
         const moved = input.bodyweightShare * bodyweightOn(input.bodyweights, on(day));
         for (const prediction of [predict(input, on(day)), predictRaw(input, on(day))]) {
-          for (const colour of COLOURS) {
-            expect((prediction as Prediction)[colour] + moved).toBeGreaterThan(0);
-          }
+          expect((prediction as number) + moved).toBeGreaterThan(0);
         }
       }
     });
@@ -103,8 +84,7 @@ describe('invariants across random logs', () => {
   it('keeps loadable weights above zero for loaded equipment', () => {
     forEachLog((input) => {
       if (input.equipment === 'bodyweight') return;
-      const predicted = predict(input, on(1000)) as Prediction;
-      for (const colour of COLOURS) expect(predicted[colour]).toBeGreaterThan(0);
+      expect(predict(input, on(1000)) as number).toBeGreaterThan(0);
     });
   });
 
@@ -136,9 +116,7 @@ describe('invariants across random logs', () => {
   it('never produces a non-finite number', () => {
     forEachLog((input) => {
       const history = strengthHistory(input, on(1000));
-      for (const colour of COLOURS) {
-        for (const point of history.lines[colour]) expect(Number.isFinite(point.kg)).toBe(true);
-      }
+      for (const point of history.line) expect(Number.isFinite(point.kg)).toBe(true);
       for (const dot of history.dots) expect(Number.isFinite(dot.kg)).toBe(true);
     });
   });

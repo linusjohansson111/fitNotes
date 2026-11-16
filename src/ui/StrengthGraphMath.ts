@@ -1,4 +1,3 @@
-import { COLOURS } from '../domain/colour';
 import { addDays, daysBetween } from '../domain/date';
 import type { Colour, ISODate } from '../domain/types';
 import type { StrengthDot, StrengthHistory, StrengthPoint } from '../model';
@@ -26,13 +25,6 @@ const Y_PADDING_SHARE = 0.12;
 const MIN_Y_PADDING_KG = 1;
 const MAX_DOT_RADIUS = 4.5;
 const MIN_DOT_RADIUS = 2.5;
-const OTHER_DOT_SHARE = 0.67;
-
-export interface GraphLine {
-  colour: Colour;
-  /** SVG path data. */
-  d: string;
-}
 
 export interface GraphDot {
   entryId: string;
@@ -48,9 +40,9 @@ export interface GraphGuide {
 }
 
 export interface GraphLayout {
-  /** Other colours first, so the current colour stays on top where lines overlap. */
-  lines: GraphLine[];
-  /** Same order as `lines`. */
+  /** SVG path data for the 8-rep trend. */
+  line: string;
+  /** Entries at their 8-rep equivalent, oldest first. */
   dots: GraphDot[];
   guides: GraphGuide[];
   guideLeft: number;
@@ -65,7 +57,7 @@ export function visibleWindow(
   range: Range,
   asOf: ISODate,
 ): { from: ISODate; to: ISODate } {
-  const dated = [...COLOURS.flatMap((colour) => history.lines[colour]), ...history.dots];
+  const dated = [...history.line, ...history.dots];
   const earliest = dated.reduce((first, { date }) => (date < first ? date : first), asOf);
   const limit = range === 'All' ? earliest : addDays(asOf, -RANGE_DAYS[range]);
   const from = earliest > limit ? earliest : limit;
@@ -125,54 +117,30 @@ function path(points: { x: number; y: number }[]): string {
   return points.map(({ x, y }, index) => `${index === 0 ? 'M' : 'L'}${coordinate(x)} ${coordinate(y)}`).join('');
 }
 
-function currentLast(colour: Colour): Colour[] {
-  return [...COLOURS.filter((other) => other !== colour), colour];
-}
-
-export function layoutGraph(
-  history: StrengthHistory,
-  current: Colour,
-  range: Range,
-  asOf: ISODate,
-): GraphLayout {
+export function layoutGraph(history: StrengthHistory, range: Range, asOf: ISODate): GraphLayout {
   const { from, to } = visibleWindow(history, range, asOf);
-  const clipped = currentLast(current).map((colour) => ({
-    colour,
-    points: clipLine(history.lines[colour], from, to),
-  }));
+  const clipped = clipLine(history.line, from, to);
   const shown: StrengthDot[] = history.dots.filter(({ date }) => date >= from && date <= to);
-  const [low, high] = yDomain([
-    ...clipped.flatMap(({ points }) => points.map(({ kg }) => kg)),
-    ...shown.map(({ kg }) => kg),
-  ]);
+  const [low, high] = yDomain([...clipped.map(({ kg }) => kg), ...shown.map(({ kg }) => kg)]);
 
   const days = daysBetween(from, to);
   const width = PLOT.right - PLOT.left;
   const xOf = (date: ISODate) => PLOT.left + (daysBetween(from, date) / days) * width;
   const yOf = (kg: number) => PLOT.bottom - ((kg - low) / (high - low)) * (PLOT.bottom - PLOT.top);
 
-  const lines = clipped.map(({ colour, points }) => ({
+  const radius = dotRadius(shown.length, width);
+  const dots = shown.map(({ entryId, date, kg, colour }) => ({
+    entryId,
     colour,
-    d: path(points.map(({ date, kg }) => ({ x: xOf(date), y: yOf(kg) }))),
+    x: coordinate(xOf(date)),
+    y: coordinate(yOf(kg)),
+    r: radius,
   }));
-
-  const radius = dotRadius(shown.filter(({ colour }) => colour === current).length, width);
-  const dots = currentLast(current).flatMap((colour) =>
-    shown
-      .filter((dot) => dot.colour === colour)
-      .map(({ entryId, date, kg }) => ({
-        entryId,
-        colour,
-        x: coordinate(xOf(date)),
-        y: coordinate(yOf(kg)),
-        r: colour === current ? radius : radius * OTHER_DOT_SHARE,
-      })),
-  );
 
   const dateLabel = (date: ISODate) => (days >= MONTH_LABELS_FROM_DAYS ? monthYear(date) : shortDate(date, to));
 
   return {
-    lines,
+    line: path(clipped.map(({ date, kg }) => ({ x: xOf(date), y: yOf(kg) }))),
     dots,
     guides: yTicks(low, high).map((kg) => ({ y: coordinate(yOf(kg)), label: formatKg(kg) })),
     guideLeft: PLOT.left,

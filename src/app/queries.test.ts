@@ -21,18 +21,20 @@ const data = (entries: Entry[], extra: Partial<AppData> = {}): AppData => ({
 });
 
 describe('buildQueries', () => {
-  it('AC4: lists only logged exercises by group, most recent first', () => {
+  it('AC4: lists only logged exercises by group, most recent first, with the last weight lifted', () => {
     const queries = buildQueries(
       data([
         entry(SQUAT, '2026-03-01', 100, 8),
-        entry(BENCH, '2026-03-02', 80, 8),
+        entry(BENCH, '2026-03-02', 90, 4),
+        entry(BENCH, '2026-02-20', 80, 8),
         entry('Incline_Dumbbell_Press', '2026-03-03', 30, 8),
       ]),
     );
-    const groups = queries.logged('2026-03-05');
+    const groups = queries.logged();
     expect(groups.map((group) => group.group)).toEqual(['Chest', 'Legs']);
     expect(groups[0].exercises.map((row) => row.exercise.id)).toEqual(['Incline_Dumbbell_Press', BENCH]);
-    expect(groups[0].exercises[1].next).toBe(80);
+    expect(groups[0].exercises[1].lastWeightKg).toBe(90);
+    expect(groups[1].exercises[0].lastWeightKg).toBe(100);
   });
 
   it("gives an exercise its last entry's colour, and yellow before any entry", () => {
@@ -53,7 +55,7 @@ describe('buildQueries', () => {
   it('AC16: every exercise in the bank is predicted and counts on the map for each of its muscles', () => {
     for (const { id, primaryMuscles, secondaryMuscles } of EXERCISES) {
       const queries = buildQueries(data([entry(id, '2026-03-01', 40, 8)]));
-      expect(queries.predict(id, '2026-03-02')?.yellow, id).toBeTypeOf('number');
+      expect(queries.predict(id, '2026-03-02'), id).toBeTypeOf('number');
       const balance = queries.muscleBalance('2026-03-02');
       for (const muscle of [...primaryMuscles, ...secondaryMuscles]) expect(balance[muscle], id).toBe(0);
     }
@@ -64,23 +66,22 @@ describe('buildQueries', () => {
     const without = buildQueries(data([bench]));
     const withOld = buildQueries(data([bench, entry('custom_1', '2026-03-01', 500, 8)]));
     expect(withOld.muscleBalance('2026-03-02')).toEqual(without.muscleBalance('2026-03-02'));
-    expect(withOld.logged('2026-03-02')).toEqual(without.logged('2026-03-02'));
+    expect(withOld.logged()).toEqual(without.logged());
   });
 
   it('AC29: shares logged dumbbells across exercises, but not machine weights', () => {
     const press = 'Incline_Dumbbell_Press';
     const curl = 'Dumbbell_Bicep_Curl';
     const own = [entry(press, '2026-03-01', 40, 4), entry(press, '2026-03-04', 37.5, 8)];
-    for (const kg of Object.values(buildQueries(data(own)).predict(press, '2026-03-05')!)) {
-      expect([39.5, 33.5]).not.toContain(kg);
-      expect(kg % 2.5 === 0 || [40, 37.5].includes(kg)).toBe(true);
-    }
+    const kg = buildQueries(data(own)).predict(press, '2026-03-05') as number;
+    expect([39.5, 33.5]).not.toContain(kg);
+    expect(kg % 2.5 === 0 || [40, 37.5].includes(kg)).toBe(true);
 
-    // A curl of 12.5 x 7 per hand puts yellow just under 12 kg.
+    // A curl of 12.5 x 7 per hand puts 8 reps just under 12 kg.
     const curlOnly = [entry(curl, '2026-03-01', 12.5, 7)];
-    expect(buildQueries(data(curlOnly)).predict(curl, '2026-03-02')?.yellow).toBe(12.5);
+    expect(buildQueries(data(curlOnly)).predict(curl, '2026-03-02')).toBe(12.5);
     const withPress = buildQueries(data([...curlOnly, entry(press, '2026-03-01', 12, 8)]));
-    expect(withPress.predict(curl, '2026-03-02')?.yellow).toBe(12);
+    expect(withPress.predict(curl, '2026-03-02')).toBe(12);
 
     const machine = 'Leg_Extensions';
     const alone = buildQueries(data([entry(machine, '2026-03-01', 50, 8)]));
@@ -88,10 +89,10 @@ describe('buildQueries', () => {
     expect(withOther.predict(machine, '2026-03-02')).toEqual(alone.predict(machine, '2026-03-02'));
   });
 
-  it('AC32: suggests less added weight for 5 reps on Pushups than on Pullups, both first logged at 0 x 20', () => {
+  it('AC32: suggests less added weight on Pushups than on Pullups, both first logged at 0 x 20', () => {
     const queries = buildQueries(data([entry('Pushups', '2026-03-01', 0, 20), entry('Pullups', '2026-03-01', 0, 20)]));
-    const pushUps = queries.predict('Pushups', '2026-03-02')?.red as number;
-    const pullUps = queries.predict('Pullups', '2026-03-02')?.red as number;
+    const pushUps = queries.predict('Pushups', '2026-03-02') as number;
+    const pullUps = queries.predict('Pullups', '2026-03-02') as number;
     expect(pushUps).toBeLessThan(pullUps);
   });
 

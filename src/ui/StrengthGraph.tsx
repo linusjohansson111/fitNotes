@@ -1,21 +1,18 @@
 import { useMemo, useState } from 'react';
-import type { Colour, ISODate } from '../domain/types';
+import type { ISODate } from '../domain/types';
 import type { StrengthHistory } from '../model';
 import './insight.css';
 import { GRAPH_HEIGHT, GRAPH_WIDTH, RANGES, type Range, layoutGraph } from './StrengthGraphMath';
 
 export interface StrengthGraphProps {
   history: StrengthHistory;
-  /** The exercise's current colour: its line and dots lead, the others stay dim. */
-  colour: Colour;
   asOf: ISODate;
 }
 
-/** Three strength lines with entry dots, over a chosen range of time. */
-export function StrengthGraph({ history, colour, asOf }: StrengthGraphProps) {
+/** One yellow 8-rep line with entry dots coloured by their reps, over a chosen range of time. */
+export function StrengthGraph({ history, asOf }: StrengthGraphProps) {
   const [range, setRange] = useState<Range>('3M');
-  const layout = useMemo(() => layoutGraph(history, colour, range, asOf), [history, colour, range, asOf]);
-  const lead = (lineColour: Colour) => (lineColour === colour ? ' ins-lead' : '');
+  const layout = useMemo(() => layoutGraph(history, range, asOf), [history, range, asOf]);
 
   return (
     <section className="ins-graph">
@@ -34,17 +31,9 @@ export function StrengthGraph({ history, colour, asOf }: StrengthGraphProps) {
         <text className="ins-axis" x={layout.guideRight} y={layout.axisY} textAnchor="end">
           {layout.dateLabels[1]}
         </text>
-        {layout.lines.map((line) => (
-          <path key={line.colour} className={`ins-line ins-${line.colour}${lead(line.colour)}`} d={line.d} />
-        ))}
+        <path className="ins-line ins-yellow" d={layout.line} />
         {layout.dots.map((dot) => (
-          <circle
-            key={dot.entryId}
-            className={`ins-dot ins-${dot.colour}${lead(dot.colour)}`}
-            cx={dot.x}
-            cy={dot.y}
-            r={dot.r}
-          />
+          <circle key={dot.entryId} className={`ins-dot ins-${dot.colour}`} cx={dot.x} cy={dot.y} r={dot.r} />
         ))}
       </svg>
       <div className="ins-ranges" role="group" aria-label="Range">

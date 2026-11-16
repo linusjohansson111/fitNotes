@@ -172,27 +172,32 @@ async function run(browser) {
   check('AC5 a new exercise starts on 8 reps', (await page.locator('#log-reps').inputValue()) === '8');
   check('AC5 a new exercise starts with a blank weight', (await page.locator('#log-weight').inputValue()) === '');
 
-  // AC7: all three colours from one entry.
+  // AC7, AC13: one entry of 80 x 8 suggests 80, once, on one line.
   await logWith(page, 80, 8, daysAgo(7));
-  const first = await main(page);
-  check('AC7 shows all three colours after one entry', /87\.5[\s\S]*80[\s\S]*72\.5/.test(first), first.slice(0, 200));
+  check('AC7 suggests 80 after 80 x 8', (await page.locator('.ins-suggestion-kg').allInnerTexts()).join() === '80');
+  check('AC13 shows one suggested weight with no rep count', (await page.locator('.ins-suggestion').innerText()).replace(/\s+/g, ' ') === 'Suggested 80 kg');
+  check('AC13 the graph draws one line', (await page.locator('svg[aria-label^="Strength"] path').count()) === 1);
   await shot(page, '2-first-entry');
 
   await page.getByLabel('Home', { exact: true }).first().click();
   await shot(page, '3-home');
   check('AC4 home lists the exercise', (await homeRows(page)).some((row) => row.includes('Barbell Bench Press')));
+  check('AC4 home shows the last weight', (await page.locator('.row-weight').first().innerText()) === '80');
   check('AC36 home names the next workout', (await page.locator('.next-workout').innerText()).includes('Pull'));
 
-  // AC5, AC6: the form starts on the prediction and follows the reps until edited.
+  // AC5, AC6: the form starts on the last weight with the suggestion under it, and reps only recolour it.
   await page.locator('.row-log').first().click();
-  check('AC5 starts on the predicted weight', (await page.locator('#log-weight').inputValue()) === '80');
+  check('AC5 starts on the last weight', (await page.locator('#log-weight').inputValue()) === '80');
+  check('AC5 starts on 8 reps', (await page.locator('#log-reps').inputValue()) === '8');
+  check('AC5 shows the suggestion under the weight', (await page.locator('.log-suggestion').innerText()) === 'Suggested 80 kg');
+  await shot(page, '3-log-form');
   await page.locator('#log-reps').fill('6');
   check('AC6 reps 6 turn the form red', (await page.locator('form.log').getAttribute('data-colour')) === 'red');
-  check('AC6 an unedited weight follows the colour', (await page.locator('#log-weight').inputValue()) === '87.5');
+  check('AC6 the weight stays on 80', (await page.locator('#log-weight').inputValue()) === '80');
   await page.locator('#log-weight').fill('90');
   await page.locator('#log-reps').fill('11');
   check('AC6 reps 11 turn the form green', (await page.locator('form.log').getAttribute('data-colour')) === 'green');
-  check('AC6 an edited weight stays', (await page.locator('#log-weight').inputValue()) === '90');
+  check('AC6 a typed weight stays', (await page.locator('#log-weight').inputValue()) === '90');
 
   // The second entry, in another colour, today.
   await logWith(page, 90, 5);
@@ -228,10 +233,10 @@ async function run(browser) {
   await logNew(page, 'Incline Dumbell Press', 'Incline Dumbbell Press', 40, 4, daysAgo(2));
   await page.getByRole('link', { name: 'Log', exact: true }).click();
   await logWith(page, 37.5, 8);
-  const shown = (await page.locator('.ins-weight-kg').allInnerTexts()).map((text) => Number(text.replace('−', '-')));
+  const shown = (await page.locator('.ins-suggestion-kg').allInnerTexts()).map((text) => Number(text.replace('−', '-')));
   check(
     'AC29 Incline Dumbbell Press shows only real dumbbell weights',
-    shown.length === 3 && shown.every((kg) => kg % 2.5 === 0 || kg === 37.5 || kg === 40),
+    shown.length === 1 && shown.every((kg) => kg % 2.5 === 0 || kg === 37.5 || kg === 40),
     shown.join(' '),
   );
   await shot(page, '5-real-weights');

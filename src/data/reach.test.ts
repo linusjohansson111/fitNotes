@@ -23,10 +23,11 @@ describe('every row is reachable', () => {
     for (const { id, group } of EXERCISES) {
       const entries = [{ id: 'e', exerciseId: id, date: '2026-03-01', weightKg: 40, reps: 8, updatedAt: 2 }];
       const queries = buildQueries({ ...data, entries });
-      const [home] = queries.logged('2026-03-02');
+      const [home] = queries.logged();
       expect(home?.group, id).toBe(group);
       expect(home?.exercises[0].exercise.id, id).toBe(id);
-      expect(home?.exercises[0].next, id).toBeTypeOf('number');
+      expect(home?.exercises[0].lastWeightKg, id).toBe(40);
+      expect(queries.predict(id, '2026-03-02'), id).toBeTypeOf('number');
       expect(queries.strengthHistory(id, '2026-03-02').dots, id).toHaveLength(1);
     }
   });

@@ -40,8 +40,8 @@ const RACKS: readonly Equipment[] = ['dumbbell', 'barbell', 'kettlebell'];
 export interface LoggedExercise {
   exercise: Exercise;
   lastDate: ISODate;
-  /** The weight for the exercise's colour next time. */
-  next: number | null;
+  /** The last live entry's weight, as logged. */
+  lastWeightKg: number;
 }
 
 export interface LoggedGroup {
@@ -55,7 +55,7 @@ export interface Queries {
   /** Live entries for one exercise, newest first. */
   entries(exerciseId: string): Entry[];
   /** Only logged exercises, by group, most recent first within each. */
-  logged(date: ISODate): LoggedGroup[];
+  logged(): LoggedGroup[];
   predict(exerciseId: string, date: ISODate): Prediction | null;
   strengthHistory(exerciseId: string, asOf: ISODate): StrengthHistory;
   muscleBalance(date: ISODate): Record<Muscle, number | null>;
@@ -134,13 +134,12 @@ export function buildQueries(data: AppData): Queries {
     exercises,
     exercise: (id) => byId.get(id),
     entries: (exerciseId) => entriesById.get(exerciseId) ?? [],
-    logged(date) {
+    logged() {
       const rows: LoggedExercise[] = [];
       for (const [exerciseId, entries] of entriesById) {
         const exercise = byId.get(exerciseId);
         if (!exercise) continue;
-        const prediction = predict(inputFor(exerciseId), date);
-        rows.push({ exercise, lastDate: entries[0].date, next: prediction?.[exercise.colour] ?? null });
+        rows.push({ exercise, lastDate: entries[0].date, lastWeightKg: entries[0].weightKg });
       }
       rows.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
       return GROUPS.flatMap((group) => {

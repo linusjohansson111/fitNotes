@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueries } from '../app/queries';
-import { COLOURS, TARGET_REPS, colourForReps } from '../domain/colour';
+import { colourForReps } from '../domain/colour';
 import { today } from '../domain/date';
-import type { Colour, Entry, ISODate, Prediction } from '../domain/types';
+import type { Entry, ISODate } from '../domain/types';
 import { setNote } from '../store';
 import { formatKg } from './format';
 import './insight.css';
@@ -10,19 +10,14 @@ import { shortDate, sinceLabel } from './insightFormat';
 import { href } from './nav';
 import { StrengthGraph } from './StrengthGraph';
 
-function Weights({ prediction, current }: { prediction: Prediction; current: Colour }) {
+/** The weight for 8 reps next session, yellow like the line it ends. 8 is implied. */
+function Suggestion({ kg }: { kg: number }) {
   return (
-    <div className="ins-weights">
-      {COLOURS.map((colour) => (
-        <div
-          key={colour}
-          className={`ins-weight ins-${colour}${colour === current ? ' ins-weight--now' : ''}`}
-          data-colour={colour}
-        >
-          <span className="ins-weight-kg">{formatKg(prediction[colour])}</span>
-          <span className="ins-weight-reps">kg × {TARGET_REPS[colour]}</span>
-        </div>
-      ))}
+    <div className="ins-suggestion ins-yellow">
+      <span className="ins-suggestion-label">Suggested</span>
+      <span className="ins-suggestion-weight">
+        <span className="ins-suggestion-kg">{formatKg(kg)}</span> kg
+      </span>
     </div>
   );
 }
@@ -121,13 +116,13 @@ export function ExerciseScreen({ exerciseId }: { exerciseId: string }) {
         <h1 className="ins-title">{exercise.name}</h1>
       </header>
 
-      {prediction && <Weights prediction={prediction} current={exercise.colour} />}
+      {prediction !== null && <Suggestion kg={prediction} />}
 
       <a className={`ins-log ins-${exercise.colour}`} href={href({ name: 'log', exerciseId })}>
         Log
       </a>
 
-      {prediction && <StrengthGraph history={history} colour={exercise.colour} asOf={date} />}
+      {prediction !== null && <StrengthGraph history={history} asOf={date} />}
 
       {last && (
         <p className="ins-last">

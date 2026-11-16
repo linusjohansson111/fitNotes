@@ -17,8 +17,7 @@ import {
 const ASOF = '2026-10-31';
 
 function history(points: StrengthPoint[], dots: StrengthHistory['dots'] = []): StrengthHistory {
-  const shifted = (kg: number) => points.map((point) => ({ ...point, kg: point.kg + kg }));
-  return { lines: { red: shifted(10), yellow: shifted(0), green: shifted(-10) }, dots };
+  return { line: points, dots };
 }
 
 const dot = (date: ISODate, kg: number, colour: Colour = 'yellow') => ({ entryId: `${date}-${colour}`, date, kg, colour });
@@ -190,9 +189,9 @@ describe('dotRadius', () => {
 
 describe('layoutGraph', () => {
   it('handles a single session on the day it is viewed', () => {
-    const layout = layoutGraph(history([{ date: ASOF, kg: 80 }], [dot(ASOF, 80)]), 'yellow', '3M', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
-    const [x1, y1, x2, y2] = coordinates(layout.lines[2].d);
+    const layout = layoutGraph(history([{ date: ASOF, kg: 80 }], [dot(ASOF, 80)]), '3M', ASOF);
+    expectInsideGraph(layout.line);
+    const [x1, y1, x2, y2] = coordinates(layout.line);
     expect(x2).toBeGreaterThan(x1);
     expect(y2).toBe(y1);
     expect(layout.dots).toHaveLength(1);
@@ -203,15 +202,14 @@ describe('layoutGraph', () => {
       { date: addDays(ASOF, -3), kg: 80 },
       { date: ASOF, kg: 79.5 },
     ];
-    const layout = layoutGraph(history(points, [dot(points[0].date, 80)]), 'yellow', '3M', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
+    const layout = layoutGraph(history(points, [dot(points[0].date, 80)]), '3M', ASOF);
+    expectInsideGraph(layout.line);
   });
 
   it('handles every point being identical, with a y span of zero', () => {
-    const flat = { lines: { red: [{ date: ASOF, kg: 50 }], yellow: [{ date: ASOF, kg: 50 }], green: [{ date: ASOF, kg: 50 }] }, dots: [dot(ASOF, 50)] };
-    const layout = layoutGraph(flat, 'green', 'All', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
-    expect(coordinates(layout.lines[0].d)[1]).toBeLessThan(GRAPH_HEIGHT);
+    const layout = layoutGraph(history([{ date: ASOF, kg: 50 }], [dot(ASOF, 50)]), 'All', ASOF);
+    expectInsideGraph(layout.line);
+    expect(coordinates(layout.line)[1]).toBeLessThan(GRAPH_HEIGHT);
   });
 
   it('keeps drawing when a range holds no sessions, and fits y to what is left', () => {
@@ -219,39 +217,27 @@ describe('layoutGraph', () => {
     const points = [
       { date: addDays(ASOF, -300), kg: 40 },
       { date: old, kg: 100 },
-      { date: ASOF, kg: 100 },
+      { date: ASOF, kg: 110 },
     ];
-    const layout = layoutGraph(history(points, [dot(old, 100)]), 'yellow', '3M', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
+    const layout = layoutGraph(history(points, [dot(old, 100)]), '3M', ASOF);
+    expectInsideGraph(layout.line);
     expect(layout.dots).toEqual([]);
     expect(layout.guides.length).toBeGreaterThan(0);
-    // y fits 90..110 only, so the old 40 kg does not squash the lines together.
-    const yOfFirst = (index: number) => coordinates(layout.lines[index].d)[1];
-    expect(Math.abs(yOfFirst(0) - yOfFirst(1))).toBeGreaterThan(30);
+    // y fits about 100..110 only, so the old 40 kg does not flatten the line.
+    const [, yStart, , yEnd] = coordinates(layout.line);
+    expect(Math.abs(yStart - yEnd)).toBeGreaterThan(30);
   });
 
   it('keeps the last known value when the history has no asOf point at all', () => {
     const stale = history([{ date: addDays(ASOF, -200), kg: 100 }]);
-    const layout = layoutGraph(stale, 'red', '3M', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
+    expectInsideGraph(layoutGraph(stale, '3M', ASOF).line);
   });
 
-  it('paints the current colour last, so an overlapping line never hides it', () => {
-    const same = [{ date: addDays(ASOF, -30), kg: 60 }, { date: ASOF, kg: 60 }];
-    const overlapping = { lines: { red: same, yellow: same, green: same }, dots: [dot(same[0].date, 60, 'green'), dot(ASOF, 60, 'yellow')] };
-    for (const colour of ['red', 'yellow', 'green'] as const) {
-      const layout = layoutGraph(overlapping, colour, '3M', ASOF);
-      expect(layout.lines[2].colour).toBe(colour);
-      expect(new Set(layout.lines.map(({ d }) => d)).size).toBe(1);
-    }
-    expect(layoutGraph(overlapping, 'green', '3M', ASOF).dots.at(-1)?.colour).toBe('green');
-  });
-
-  it('makes dots of the current colour larger than the others', () => {
-    const dots = [dot(addDays(ASOF, -10), 90, 'red'), dot(ASOF, 80, 'yellow')];
-    const layout = layoutGraph(history([{ date: addDays(ASOF, -10), kg: 80 }, { date: ASOF, kg: 80 }], dots), 'yellow', '3M', ASOF);
-    const radius = (colour: Colour) => layout.dots.find((candidate) => candidate.colour === colour)?.r ?? 0;
-    expect(radius('yellow')).toBeGreaterThan(radius('red'));
+  it('colours each dot by its own reps, all the same size, oldest first', () => {
+    const dots = [dot(addDays(ASOF, -20), 78, 'green'), dot(addDays(ASOF, -10), 90, 'red'), dot(ASOF, 80, 'yellow')];
+    const layout = layoutGraph(history([{ date: addDays(ASOF, -20), kg: 80 }, { date: ASOF, kg: 80 }], dots), '3M', ASOF);
+    expect(layout.dots.map(({ colour }) => colour)).toEqual(['green', 'red', 'yellow']);
+    expect(new Set(layout.dots.map(({ r }) => r)).size).toBe(1);
   });
 
   it('works with negative weights, with higher weight drawn higher', () => {
@@ -260,10 +246,10 @@ describe('layoutGraph', () => {
       { date: addDays(ASOF, -30), kg: -25 },
       { date: ASOF, kg: -12.5 },
     ];
-    const layout = layoutGraph(history(points, [dot(points[1].date, -25)]), 'yellow', '3M', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
-    const yellow = coordinates(layout.lines[2].d);
-    expect(yellow[yellow.length - 1]).toBeLessThan(yellow[1]);
+    const layout = layoutGraph(history(points, [dot(points[1].date, -25)]), '3M', ASOF);
+    expectInsideGraph(layout.line);
+    const line = coordinates(layout.line);
+    expect(line[line.length - 1]).toBeLessThan(line[1]);
     expect(layout.guides.some(({ label }) => label.startsWith('−'))).toBe(true);
   });
 
@@ -273,8 +259,8 @@ describe('layoutGraph', () => {
       kg: 60 + index * 0.25 + (index % 5),
     }));
     const dots = points.map((point, index) => dot(point.date, point.kg, index % 3 === 0 ? 'red' : 'yellow'));
-    const layout = layoutGraph(history(points, dots), 'yellow', 'All', ASOF);
-    layout.lines.forEach(({ d }) => expectInsideGraph(d));
+    const layout = layoutGraph(history(points, dots), 'All', ASOF);
+    expectInsideGraph(layout.line);
     expect(layout.dots).toHaveLength(160);
     expect(layout.dateLabels).toEqual(['Oct 2023', 'Oct 2026']);
     expect(layout.guides.length).toBeLessThanOrEqual(5);
@@ -286,7 +272,7 @@ describe('layoutGraph', () => {
   });
 
   it('labels a short window by day', () => {
-    const layout = layoutGraph(history([{ date: ASOF, kg: 80 }]), 'yellow', '3M', ASOF);
+    const layout = layoutGraph(history([{ date: ASOF, kg: 80 }]), '3M', ASOF);
     expect(layout.dateLabels).toEqual(['17 Oct', '31 Oct']);
   });
 });

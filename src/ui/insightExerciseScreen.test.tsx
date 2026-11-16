@@ -40,38 +40,21 @@ function log(date: string, weightKg: number, reps: number, exerciseId = BENCH) {
   return store.addEntry({ exerciseId, date, weightKg, reps });
 }
 
-const weight = (container: HTMLElement, colour: string) => {
-  const cell = container.querySelector(`.ins-weight[data-colour="${colour}"]`) as HTMLElement;
-  return Number(cell.querySelector('.ins-weight-kg')?.textContent?.replace('−', '-'));
-};
+const suggested = (container: HTMLElement) =>
+  Number(container.querySelector('.ins-suggestion-kg')?.textContent?.replace('−', '-'));
 
 const historyRows = () => within(screen.getByRole('list', { name: 'History' })).getAllByRole('link');
 const circles = (container: HTMLElement) => container.querySelectorAll('circle').length;
 
 describe('ExerciseScreen', () => {
-  it('AC7: after a first entry of 80 kg x 8, shows all three colours and no uncertainty', async () => {
+  it('AC7: after a first entry of 80 kg x 8, suggests 80 kg once, with no rep count and no uncertainty', async () => {
     await log(TODAY, 80, 8);
     const { container } = await open();
 
-    expect(weight(container, 'yellow')).toBe(80);
-    expect(weight(container, 'red')).toBeGreaterThanOrEqual(87);
-    expect(weight(container, 'red')).toBeLessThanOrEqual(89);
-    expect(weight(container, 'green')).toBeGreaterThanOrEqual(72.5);
-    expect(weight(container, 'green')).toBeLessThanOrEqual(74.5);
-    expect(weight(container, 'red')).toBeGreaterThan(weight(container, 'yellow'));
-    expect(weight(container, 'yellow')).toBeGreaterThan(weight(container, 'green'));
-
-    expect(screen.getByText('kg × 5')).toBeTruthy();
-    expect(screen.getByText('kg × 8')).toBeTruthy();
-    expect(screen.getByText('kg × 11')).toBeTruthy();
+    expect(container.querySelectorAll('.ins-suggestion')).toHaveLength(1);
+    expect(suggested(container)).toBe(80);
+    expect(container.querySelector('.ins-suggestion')?.textContent).toBe('Suggested80 kg');
     expect(container.textContent).not.toMatch(/±|≈|~|%|accura|estimat|uncertain|confidence|range/i);
-  });
-
-  it('AC13: brightens only the current colour', async () => {
-    await log(TODAY, 80, 8);
-    const { container } = await open();
-    const bright = [...container.querySelectorAll('.ins-weight--now')];
-    expect(bright.map((cell) => cell.getAttribute('data-colour'))).toEqual(['yellow']);
   });
 
   it('links a large Log button in the current colour to the log form', async () => {
@@ -92,18 +75,23 @@ describe('ExerciseScreen', () => {
   it('AC12: shows assistance as a negative weight', async () => {
     await log(TODAY, -30, 8, ASSISTED);
     const { container } = await open(ASSISTED);
-    expect(container.querySelector('.ins-weight[data-colour="yellow"] .ins-weight-kg')?.textContent).toBe('−30');
+    expect(container.querySelector('.ins-suggestion-kg')?.textContent).toBe('−30');
     expect(screen.getByText(/^Last −30 kg × 8/)).toBeTruthy();
   });
 
-  it('AC13: shows three lines, entry dots and ranges, defaulting to 3M', async () => {
+  it('AC13: shows one yellow line, dots coloured by their own reps, and ranges defaulting to 3M', async () => {
     await log(addDays(TODAY, -300), 70, 8);
-    await log(addDays(TODAY, -30), 80, 8);
-    await log(addDays(TODAY, -10), 82.5, 8);
+    await log(addDays(TODAY, -30), 90, 4);
+    await log(addDays(TODAY, -10), 70, 12);
     const { container } = await open();
 
-    expect(container.querySelectorAll('path.ins-line')).toHaveLength(3);
-    expect(circles(container)).toBe(2);
+    const lines = container.querySelectorAll('path.ins-line');
+    expect(lines).toHaveLength(1);
+    expect(lines[0].classList.contains('ins-yellow')).toBe(true);
+    expect([...container.querySelectorAll('circle')].map((dot) => dot.getAttribute('class'))).toEqual([
+      'ins-dot ins-red',
+      'ins-dot ins-green',
+    ]);
     fireEvent.click(screen.getByRole('button', { name: '1Y' }));
     expect(circles(container)).toBe(3);
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
@@ -138,16 +126,15 @@ describe('ExerciseScreen', () => {
   it('AC14: recalculates predictions, graph, last session and history after an edit', async () => {
     const entry = await log(TODAY, 80, 8);
     const { container } = await open();
-    const before = container.querySelector('path.ins-lead')?.getAttribute('d');
+    const before = container.querySelector('path.ins-line')?.getAttribute('d');
 
     await act(() => store.addEntry({ exerciseId: BENCH, date: addDays(TODAY, -7), weightKg: 60, reps: 8 }));
-    expect(container.querySelector('path.ins-lead')?.getAttribute('d')).not.toBe(before);
-    const redBefore = weight(container, 'red');
+    expect(container.querySelector('path.ins-line')?.getAttribute('d')).not.toBe(before);
+    const suggestedBefore = suggested(container);
 
     await act(() => store.updateEntry(entry.id, { weightKg: 120, reps: 4 }));
 
-    expect(weight(container, 'red')).toBeGreaterThan(redBefore);
-    expect(container.querySelector('.ins-weight--now')?.getAttribute('data-colour')).toBe('red');
+    expect(suggested(container)).toBeGreaterThan(suggestedBefore);
     expect(screen.getByText('Last 120 kg × 4 · today')).toBeTruthy();
     expect(historyRows()[0].textContent).toContain('120 kg × 4');
     expect(screen.getByRole('link', { name: 'Log' }).className).toContain('ins-red');
@@ -157,10 +144,10 @@ describe('ExerciseScreen', () => {
     const first = await log(addDays(TODAY, -7), 60, 8);
     const second = await log(TODAY, 100, 8);
     const { container } = await open();
-    expect(weight(container, 'yellow')).toBeGreaterThan(90);
+    expect(suggested(container)).toBeGreaterThan(90);
 
     await act(() => store.deleteEntry(second.id));
-    expect(weight(container, 'yellow')).toBeLessThan(70);
+    expect(suggested(container)).toBeLessThan(70);
     expect(historyRows()).toHaveLength(1);
 
     await act(() => store.deleteEntry(first.id));

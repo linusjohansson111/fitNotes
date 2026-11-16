@@ -120,5 +120,5 @@ export interface ExerciseNote extends SyncMeta {
   note: string;
 }
 
-/** Weight for each colour's target reps. */
-export type Prediction = Record<Colour, number>;
+/** Weight for 8 reps, as logged. */
+export type Prediction = number;

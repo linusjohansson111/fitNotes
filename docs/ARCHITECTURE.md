@@ -25,11 +25,11 @@ interface ModelInput {
   rackWeights: number[]                                           // logged on other exercises sharing the rack
 }
 interface StrengthPoint { date: ISODate; kg: number }
-interface StrengthDot { entryId: string; date: ISODate; kg: number; colour: Colour }
-interface StrengthHistory { lines: Record<Colour, StrengthPoint[]>; dots: StrengthDot[] }
-predict(input: ModelInput, date: ISODate): Prediction | null      // real weights at the next session, as logged
+interface StrengthDot { entryId: string; date: ISODate; kg: number; colour: Colour } // at 8 reps, coloured by its own reps
+interface StrengthHistory { line: StrengthPoint[]; dots: StrengthDot[] }
+predict(input: ModelInput, date: ISODate): Prediction | null      // the real weight for 8 reps at the next session, as logged
 predictRaw(input: ModelInput, date: ISODate): Prediction | null   // same, before snapping
-strengthHistory(input: ModelInput, asOf: ISODate): StrengthHistory // the current fit, ending at asOf
+strengthHistory(input: ModelInput, asOf: ISODate): StrengthHistory // the current 8-rep fit, ending at asOf
 oneRepMax(input: ModelInput, date: ISODate): number | null
 lastColour(entries: Entry[]): Colour                              // 'yellow' with no entries
 gridStep(equipment: Equipment): number                            // 4 kg for kettlebells, else 2.5
@@ -54,7 +54,9 @@ useAppData(): AppData | null                                      // null until 
 addEntry, updateEntry, deleteEntry, setBodyweight, deleteBodyweight, setNote
 
 // src/app/queries.ts
+interface LoggedExercise { exercise: Exercise; lastDate: ISODate; lastWeightKg: number } // a Home row
 type Workout = 'Push' | 'Pull' | 'Legs'
+Queries.logged(): { group: Group; exercises: LoggedExercise[] }[] // by group, most recent first
 Queries.nextWorkout(date: ISODate): Workout | null               // null until a workout muscle is trained
 
 // src/backup/index.ts
@@ -64,22 +66,22 @@ connectBackup(token: string): Promise<void>
 useBackupStatus(): BackupStatus
 ```
 
-`oneRepMax` and `LiftStrength.oneRepMaxKg` use logged terms: one hand for per-hand rows,
-and share × bodyweight + added for bodyweight rows.
+`Prediction` is a number: the weight for `TARGET_REPS`, 8, as logged. `oneRepMax` is the e1RM
+of the unrounded 8-rep suggestion. It and `LiftStrength.oneRepMaxKg` use logged terms: one
+hand for per-hand rows, and share × bodyweight + added for bodyweight rows.
 
 ## Strength model
 
 `src/model/fit.ts` turns each date's strongest set into one session: the log e1RM of its
-load on the starting curve. The load is twice the weight for per-hand rows and share ×
-bodyweight + added for bodyweight rows. Deleted entries never count.
+load on the starting curve, at whatever reps it reached. The load is twice the weight for
+per-hand rows and share × bodyweight + added for bodyweight rows. Deleted entries never
+count. Colour plays no part in the model.
 
-The fit is `ln e1RM = level + K × session + offset[colour]`, weighted least squares with a
-half-life of 6 sessions. K is learned from changes within each colour, so a change of
-colour never reads as progress, and a ridge prior holds it at 0% until about 3 sessions
-outweigh it. Given K, each colour's level is its own sessions' level shrunk towards the
-shared one, so a colour starts on the curve and every untrained colour follows the trend.
-A prediction is the fit at the next session, whatever the date; the lighter colours are
-capped at the heavier ones so red ≥ yellow ≥ green.
+The fit is `ln e1RM = level + K × session`, weighted least squares over every session with a
+half-life of 6 sessions, and a ridge prior holds K at 0% until about 3 sessions outweigh it.
+A prediction is the weight whose e1RM at 8 reps is the fit at the next session, whatever the
+date. The graph's line is the fit at each session at 8 reps, and each dot is its entry's
+e1RM at 8 reps.
 
 `predict` snaps each weight to the nearest real one: the grid from zero or any weight
 already logged, on this exercise or, for dumbbells, barbells and kettlebells, on another

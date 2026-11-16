@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addDays, today } from '../domain/date';
 import { addEntry, deleteEntry, setBodyweight, updateEntry } from '../store';
+import { formatKg } from './format';
 import { LogScreen } from './LogScreen';
 import { BENCH, CURL, INCLINE, KETTLEBELL, PULLUP, SQUAT, entry, queriesFor } from './testing';
 
@@ -23,6 +24,7 @@ const reps = () => screen.getByLabelText('Reps') as HTMLInputElement;
 const date = () => screen.getByLabelText('Date') as HTMLInputElement;
 const save = () => screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
 const colour = () => form().getAttribute('data-colour');
+const suggestion = () => document.querySelector('.log-suggestion');
 
 function exerciseRoute(exerciseId: string): string {
   return `#/exercise/${encodeURIComponent(exerciseId)}`;
@@ -39,21 +41,38 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('AC5: opening the form', () => {
-  it('starts on the predicted weight, target reps and today, with no sets field', () => {
-    const queries = queriesFor([entry(BENCH, 7, 80, 8)]);
+  it('starts on the last weight, 8 reps and today, with the suggestion under the weight', () => {
+    const queries = queriesFor([entry(BENCH, 14, 80, 8), entry(BENCH, 7, 90, 4)]);
     render(<LogScreen queries={queries} exerciseId={BENCH} />);
-    expect(weight().value).toBe(String(queries.predict(BENCH, TODAY)?.yellow));
+    expect(weight().value).toBe('90');
     expect(reps().value).toBe('8');
     expect(date().value).toBe(TODAY);
     expect(colour()).toBe('yellow');
     expect(screen.queryByLabelText(/sets/i)).toBeNull();
+
+    const line = suggestion() as HTMLElement;
+    expect(line.textContent).toBe(`Suggested ${formatKg(queries.predict(BENCH, TODAY)!)} kg`);
+    expect(line.textContent).not.toBe('Suggested 90 kg');
+    expect(weight().compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(reps()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('starts a new exercise yellow, 8 reps, blank weight, with Save disabled', () => {
+  it('offers no tap action on the suggestion', async () => {
+    const user = userEvent.setup();
+    render(<LogScreen queries={queriesFor([entry(BENCH, 14, 80, 8), entry(BENCH, 7, 90, 4)])} exerciseId={BENCH} />);
+    const line = suggestion() as HTMLElement;
+    expect(line.closest('a, button, label')).toBeNull();
+    expect(line.querySelector('a, button')).toBeNull();
+    await user.click(line);
+    expect(weight().value).toBe('90');
+  });
+
+  it('starts a new exercise yellow, 8 reps, blank weight, with no suggestion and Save disabled', () => {
     render(<LogScreen queries={queriesFor([])} exerciseId={BENCH} />);
     expect(colour()).toBe('yellow');
     expect(reps().value).toBe('8');
     expect(weight().value).toBe('');
+    expect(suggestion()).toBeNull();
     expect(save().disabled).toBe(true);
   });
 
@@ -69,12 +88,13 @@ describe('AC5: opening the form', () => {
     expect(title.getAttribute('href')).toBe(exerciseRoute(BENCH));
   });
 
-  it('AC9: a latest entry of 4 reps still opens on red, at 5 reps and the red prediction', () => {
+  it('AC9: a latest entry of 4 reps still opens on 8 reps, yellow, suggesting the weight for 8', () => {
     const queries = queriesFor([entry(BENCH, 7, 90, 4)]);
     render(<LogScreen queries={queries} exerciseId={BENCH} />);
-    expect(colour()).toBe('red');
-    expect(reps().value).toBe('5');
-    expect(weight().value).toBe(String(queries.predict(BENCH, TODAY)?.red));
+    expect(colour()).toBe('yellow');
+    expect(reps().value).toBe('8');
+    expect(weight().value).toBe('90');
+    expect(suggestion()?.textContent).toBe(`Suggested ${formatKg(queries.predict(BENCH, TODAY)!)} kg`);
   });
 });
 
@@ -82,23 +102,27 @@ describe('AC6: reps crossing a boundary', () => {
   it.each([
     ['down across 6/7', 2, 'Less reps', 'red'],
     ['up across 9/10', 2, 'More reps', 'green'],
-  ] as const)('switches colour and weight stepping %s', async (_name, taps, button, expected) => {
+  ] as const)('switches colour and leaves the weight stepping %s', async (_name, taps, button, expected) => {
     const user = userEvent.setup();
     const queries = queriesFor([entry(BENCH, 7, 80, 8)]);
     render(<LogScreen queries={queries} exerciseId={BENCH} />);
+    const line = suggestion()?.textContent;
     for (let tap = 0; tap < taps; tap++) await user.click(screen.getByRole('button', { name: button }));
     expect(colour()).toBe(expected);
-    expect(weight().value).toBe(String(queries.predict(BENCH, TODAY)?.[expected]));
+    expect(weight().value).toBe('80');
+    expect(suggestion()?.textContent).toBe(line);
   });
 
   it('jumps across two boundaries when reps are typed', async () => {
     const user = userEvent.setup();
-    const queries = queriesFor([entry(BENCH, 7, 90, 4)]);
-    render(<LogScreen queries={queries} exerciseId={BENCH} />);
+    render(<LogScreen queries={queriesFor([entry(BENCH, 7, 90, 4)])} exerciseId={BENCH} />);
     await user.clear(reps());
     await user.type(reps(), '12');
     expect(colour()).toBe('green');
-    expect(weight().value).toBe(String(queries.predict(BENCH, TODAY)?.green));
+    await user.clear(reps());
+    await user.type(reps(), '3');
+    expect(colour()).toBe('red');
+    expect(weight().value).toBe('90');
   });
 
   it('keeps a typed weight', async () => {
@@ -112,7 +136,7 @@ describe('AC6: reps crossing a boundary', () => {
     expect(weight().value).toBe('77,5');
   });
 
-  it('stays blank without a prediction', async () => {
+  it('stays blank for a new exercise', async () => {
     const user = userEvent.setup();
     render(<LogScreen queries={queriesFor([])} exerciseId={BENCH} />);
     await user.click(screen.getByRole('button', { name: 'More reps' }));
@@ -123,13 +147,21 @@ describe('AC6: reps crossing a boundary', () => {
 });
 
 describe('date', () => {
-  it('takes the prediction for a new date while the weight is unedited', () => {
+  it('suggests for the selected date and leaves the weight', () => {
     const queries = queriesFor([entry(BENCH, 60, 60, 8), entry(BENCH, 1, 100, 8)]);
     render(<LogScreen queries={queries} exerciseId={BENCH} />);
     const earlier = addDays(TODAY, -30);
     fireEvent.change(date(), { target: { value: earlier } });
-    expect(weight().value).toBe(String(queries.predict(BENCH, earlier)?.yellow));
-    expect(weight().value).not.toBe(String(queries.predict(BENCH, TODAY)?.yellow));
+    expect(weight().value).toBe('100');
+    expect(suggestion()?.textContent).toBe(`Suggested ${formatKg(queries.predict(BENCH, earlier)!)} kg`);
+    expect(queries.predict(BENCH, earlier)).not.toBe(queries.predict(BENCH, TODAY));
+  });
+
+  it('drops the suggestion for a date before any entry', () => {
+    render(<LogScreen queries={queriesFor([entry(BENCH, 7, 80, 8)])} exerciseId={BENCH} />);
+    fireEvent.change(date(), { target: { value: addDays(TODAY, -30) } });
+    expect(suggestion()).toBeNull();
+    expect(weight().value).toBe('80');
   });
 
   it('refuses a future date, which iOS pickers may let through', () => {
@@ -201,13 +233,13 @@ describe('weight steps', () => {
   it('AC29: opens Incline Dumbbell Press on real dumbbells only', () => {
     const queries = queriesFor([entry(INCLINE, 5, 40, 4), entry(INCLINE, 2, 37.5, 8)]);
     for (const date of [TODAY, addDays(TODAY, -3)]) {
-      for (const kg of Object.values(queries.predict(INCLINE, date)!)) {
-        expect([39.5, 33.5]).not.toContain(kg);
-        expect(kg % 2.5).toBe(0);
-      }
+      const kg = queries.predict(INCLINE, date)!;
+      expect([39.5, 33.5]).not.toContain(kg);
+      expect(kg % 2.5).toBe(0);
     }
     render(<LogScreen queries={queries} exerciseId={INCLINE} />);
     expect(Number(weight().value) % 2.5).toBe(0);
+    expect(Number(suggestion()?.textContent?.match(/[\d.]+/)?.[0]) % 2.5).toBe(0);
   });
 
   it('uses a decimal keypad on loaded exercises', () => {
@@ -267,11 +299,12 @@ describe('AC12, AC31: bodyweight exercises', () => {
     expect(vi.mocked(addEntry).mock.calls[0][0].weightKg).toBe(kg);
   });
 
-  it('shows a negative prediction as assistance', () => {
+  it('starts on a negative last weight as assistance, and suggests one', () => {
     const queries = queriesFor([entry(PULLUP, 7, -30, 8)]);
     render(<LogScreen queries={queries} exerciseId={PULLUP} />);
-    expect(weight().value).toMatch(/^−\d/);
+    expect(weight().value).toBe('−30');
     expect(screen.getByText('Assistance')).toBeTruthy();
+    expect(suggestion()?.textContent).toBe('Suggested −30 kg');
   });
 
   it('steps across zero both ways', async () => {
@@ -321,15 +354,18 @@ describe('editing an entry', () => {
   const queries = queriesFor([entry(BENCH, 7, 80, 8), logged]);
   const edit = () => render(<LogScreen queries={queries} exerciseId={BENCH} entryId={logged.id} />);
 
-  it('starts from the entry', () => {
+  it('starts from the entry, with no suggestion', () => {
     edit();
     expect(weight().value).toBe('82.5');
     expect(reps().value).toBe('4');
     expect(date().value).toBe(logged.date);
     expect(colour()).toBe('red');
+    expect(suggestion()).toBeNull();
+    fireEvent.change(date(), { target: { value: addDays(TODAY, -1) } });
+    expect(suggestion()).toBeNull();
   });
 
-  it('counts as edited, so a crossing keeps the weight', async () => {
+  it('keeps the weight across a crossing', async () => {
     const user = userEvent.setup();
     edit();
     await user.clear(reps());

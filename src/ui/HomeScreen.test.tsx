@@ -23,6 +23,7 @@ describe('AC4: home', () => {
   const INCLINE = 'Incline_Dumbbell_Press';
   const queries = queriesFor([
     entry(SQUAT, 3, 100, 8),
+    entry(BENCH, 5, 70, 8),
     entry(BENCH, 2, 80, 4),
     entry(INCLINE, 1, 30, 11),
   ]);
@@ -38,12 +39,14 @@ describe('AC4: home', () => {
     ).toEqual([queries.exercise(INCLINE)?.name, queries.exercise(BENCH)?.name]);
   });
 
-  it("shows each row's colour and next weight in that colour", () => {
+  it("shows each row's last weight, with no reps, in that entry's colour", () => {
     render(<HomeScreen queries={queries} />);
     const bench = row(queries.exercise(BENCH)!.name);
     expect(bench.getAttribute('data-colour')).toBe('red');
-    expect(bench.querySelector('.row-next')?.textContent).toBe(String(queries.predict(BENCH, entryDay())?.red));
+    expect(bench.querySelector('.row-weight')?.textContent).toBe('80');
+    expect(bench.textContent).not.toMatch(/×|reps/);
     expect(row(queries.exercise(SQUAT)!.name).getAttribute('data-colour')).toBe('yellow');
+    expect(row(queries.exercise(SQUAT)!.name).querySelector('.row-weight')?.textContent).toBe('100');
     expect(row(queries.exercise(INCLINE)!.name).getAttribute('data-colour')).toBe('green');
   });
 
@@ -68,11 +71,11 @@ describe('AC4: home', () => {
     expect(document.querySelector('.next-workout')?.textContent).toBe('Next workoutPull');
   });
 
-  it('AC12: marks a negative next weight as assistance', () => {
-    const assisted = queriesFor([entry(PULLUP, 1, -30, 8), entry(PULLUP, 2, -30, 8)]);
+  it('AC4: labels a negative last weight assistance', () => {
+    const assisted = queriesFor([entry(PULLUP, 1, -30, 8), entry(PULLUP, 2, -20, 8)]);
     render(<HomeScreen queries={assisted} />);
-    const next = row(assisted.exercise(PULLUP)!.name).querySelector('.row-next');
-    expect(next?.textContent).toMatch(/^assistance−\d/);
+    const last = row(assisted.exercise(PULLUP)!.name).querySelector('.row-weight');
+    expect(last?.textContent).toBe('assistance−30');
   });
 
   it('shows one line, an add button and a restore link when nothing is logged', () => {
@@ -89,7 +92,3 @@ describe('AC4: home', () => {
     expect(screen.queryByRole('link', { name: 'Restore from backup' })).toBeNull();
   });
 });
-
-function entryDay(): string {
-  return entry(BENCH, 0, 0, 1).date;
-}

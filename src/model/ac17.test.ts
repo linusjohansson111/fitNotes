@@ -6,8 +6,7 @@ const SEEDS = 150;
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 const meanAbsolute = (values: number[]) => mean(values.map(Math.abs));
 
-// Each persona trains more than one colour. One that trains a single colour and always loads
-// the suggestion stalls about one plate behind, which SPEC.md accepts.
+// Each persona aims at 8 reps and loads the suggestion, and the reps reached vary around 8.
 describe('AC17: simulated 12-month logs', () => {
   it.each(PERSONAS)('prediction error falls for: $name', (persona) => {
     const first: number[] = [];

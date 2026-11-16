@@ -1,5 +1,5 @@
 import { TARGET_REPS, colourForReps } from '../domain/colour';
-import type { Colour, Entry, Equipment, ISODate, Prediction } from '../domain/types';
+import type { Colour, Entry, Equipment, ISODate } from '../domain/types';
 import { formatKg, parseKg } from './format';
 
 export interface LogFormState {
@@ -8,11 +8,8 @@ export interface LogFormState {
   weightText: string;
   /** Only used when a bodyweight exercise has no bodyweight to work from. */
   bodyweightText: string;
+  /** From the reps: below, on or above 8. Kept while the reps are blank or invalid. */
   colour: Colour;
-  /** Typed, stepped or loaded from an entry: reps and date no longer replace it. */
-  weightEdited: boolean;
-  /** For `date`. Null while the exercise has no entry to predict from. */
-  prediction: Prediction | null;
 }
 
 export type LogFormAction =
@@ -21,8 +18,7 @@ export type LogFormAction =
   | { type: 'stepWeight'; delta: number; floor: number }
   | { type: 'reps'; text: string }
   | { type: 'stepReps'; delta: number }
-  /** `prediction` is the one for the new date. */
-  | { type: 'date'; date: ISODate; prediction: Prediction | null }
+  | { type: 'date'; date: ISODate }
   | { type: 'bodyweight'; text: string };
 
 export interface LogFormContext {
@@ -42,24 +38,18 @@ export interface LogSubmission {
   bodyweightKg: number | null;
 }
 
-function predictedText(prediction: Prediction | null, colour: Colour): string {
-  return prediction ? formatKg(prediction[colour]) : '';
-}
-
-/** A log of a new set, on the exercise's colour. `prediction` is null for a new exercise. */
-export function newLogForm(colour: Colour, date: ISODate, prediction: Prediction | null): LogFormState {
+/** A log of a new set at 8 reps, on the last weight lifted. Blank for a new exercise. */
+export function newLogForm(lastWeightKg: number | null, date: ISODate): LogFormState {
   return {
     date,
-    repsText: String(TARGET_REPS[colour]),
-    weightText: predictedText(prediction, colour),
+    repsText: String(TARGET_REPS),
+    weightText: lastWeightKg === null ? '' : formatKg(lastWeightKg),
     bodyweightText: '',
-    colour,
-    weightEdited: false,
-    prediction,
+    colour: colourForReps(TARGET_REPS),
   };
 }
 
-/** An existing entry, whose weight the user chose and so counts as edited. */
+/** An existing entry, as it was logged. */
 export function editLogForm(entry: Entry): LogFormState {
   return {
     date: entry.date,
@@ -67,8 +57,6 @@ export function editLogForm(entry: Entry): LogFormState {
     weightText: formatKg(entry.weightKg),
     bodyweightText: '',
     colour: colourForReps(entry.reps),
-    weightEdited: true,
-    prediction: null,
   };
 }
 
@@ -97,28 +85,19 @@ export function needsBodyweight({ equipment, bodyweightKg }: LogFormContext): bo
   return equipment === 'bodyweight' && bodyweightKg === null;
 }
 
-function followPrediction(state: LogFormState): LogFormState {
-  if (state.weightEdited) return state;
-  return { ...state, weightText: predictedText(state.prediction, state.colour) };
-}
-
+/** Reps only recolour the form: the weight never follows them. */
 function withReps(state: LogFormState, repsText: string): LogFormState {
   const reps = parseReps(repsText);
-  if (reps === null) return { ...state, repsText };
-  return followPrediction({ ...state, repsText, colour: colourForReps(reps) });
-}
-
-function editedWeight(state: LogFormState, weightText: string): LogFormState {
-  return { ...state, weightText, weightEdited: true };
+  return { ...state, repsText, colour: reps === null ? state.colour : colourForReps(reps) };
 }
 
 export function logFormReducer(state: LogFormState, action: LogFormAction): LogFormState {
   switch (action.type) {
     case 'weight':
-      return editedWeight(state, action.text);
+      return { ...state, weightText: action.text };
     case 'stepWeight': {
       const next = (parseKg(state.weightText) ?? 0) + action.delta;
-      return next > action.floor ? editedWeight(state, formatKg(next)) : state;
+      return next > action.floor ? { ...state, weightText: formatKg(next) } : state;
     }
     case 'reps':
       return withReps(state, action.text);
@@ -127,7 +106,7 @@ export function logFormReducer(state: LogFormState, action: LogFormAction): LogF
     case 'date':
       // iOS offers a Reset button in its date picker; a form needs a date.
       if (!action.date) return state;
-      return followPrediction({ ...state, date: action.date, prediction: action.prediction });
+      return { ...state, date: action.date };
     case 'bodyweight':
       return { ...state, bodyweightText: action.text };
   }

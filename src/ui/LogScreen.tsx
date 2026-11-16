@@ -52,7 +52,7 @@ function selectAll(event: FocusEvent<HTMLInputElement>) {
 function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exercise; entry?: Entry }) {
   const date = today();
   const [state, dispatch] = useReducer(logFormReducer, undefined, () =>
-    entry ? editLogForm(entry) : newLogForm(exercise.colour, date, queries.predict(exercise.id, date)),
+    entry ? editLogForm(entry) : newLogForm(queries.entries(exercise.id).at(0)?.weightKg ?? null, date),
   );
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -68,6 +68,8 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
   };
   const result = submission(state, context);
   const floor = weightFloor(context, context.bodyweightKg);
+  /** For the selected date. An existing entry shows itself instead. */
+  const suggestion = entry ? null : queries.predict(exerciseId, state.date);
 
   /** Runs one write, then leaves. A second tap while it runs does nothing. */
   async function finish(write: () => Promise<void>) {
@@ -150,6 +152,7 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
           onFocus={selectAll}
         />
       </Stepper>
+      {suggestion !== null && <p className="log-suggestion">Suggested {formatKg(suggestion)} kg</p>}
 
       <div className="log-label">
         <label htmlFor="log-reps">Reps</label>
@@ -174,9 +177,7 @@ function LogForm({ queries, exercise, entry }: { queries: Queries; exercise: Exe
           type="date"
           max={date}
           value={state.date}
-          onChange={({ target: { value } }) =>
-            dispatch({ type: 'date', date: value, prediction: value ? queries.predict(exerciseId, value) : null })
-          }
+          onChange={(event) => dispatch({ type: 'date', date: event.target.value })}
         />
       </div>
 
