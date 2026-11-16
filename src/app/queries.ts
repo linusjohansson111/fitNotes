@@ -70,8 +70,9 @@ export interface Queries {
   bodyweightKg(date: ISODate): number | null;
 }
 
+/** The reverse of the model's order, so the first entry is the one `lastColour` reads. */
 function newestFirst(a: Entry, b: Entry): number {
-  return b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt;
+  return b.date.localeCompare(a.date) || b.updatedAt - a.updatedAt || b.id.localeCompare(a.id);
 }
 
 function median(values: number[]): number {

@@ -37,6 +37,21 @@ describe('buildQueries', () => {
     expect(groups[1].exercises[0].lastWeightKg).toBe(100);
   });
 
+  it("takes Home's weight and colour from the same entry when date and updatedAt tie", () => {
+    const tied = (id: string, weightKg: number, reps: number): Entry => ({
+      id,
+      exerciseId: BENCH,
+      date: '2026-03-01',
+      weightKg,
+      reps,
+      updatedAt: 5,
+    });
+    for (const entries of [[tied('a', 100, 4), tied('b', 80, 11)], [tied('b', 80, 11), tied('a', 100, 4)]]) {
+      const [row] = buildQueries(data(entries)).logged()[0].exercises;
+      expect([row.lastWeightKg, row.exercise.colour]).toEqual([80, 'green']);
+    }
+  });
+
   it("gives an exercise its last entry's colour, and yellow before any entry", () => {
     const queries = buildQueries(data([entry(BENCH, '2026-03-01', 80, 8), entry(BENCH, '2026-03-02', 90, 4)]));
     expect(queries.exercise(BENCH)?.colour).toBe('red');

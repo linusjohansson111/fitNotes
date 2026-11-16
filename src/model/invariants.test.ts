@@ -72,7 +72,7 @@ describe('invariants across random logs', () => {
       if (input.equipment !== 'bodyweight') return;
       const lastDay = dayOf(input.entries.at(-1) as Entry);
       for (let day = 0; day <= lastDay + 400; day += 37) {
-        if (!predict(input, on(day))) continue;
+        if (predict(input, on(day)) === null) continue;
         const moved = input.bodyweightShare * bodyweightOn(input.bodyweights, on(day));
         for (const prediction of [predict(input, on(day)), predictRaw(input, on(day))]) {
           expect((prediction as number) + moved).toBeGreaterThan(0);
