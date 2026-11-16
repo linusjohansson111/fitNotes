@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Makes a fresh checkout ready for .claude/check: installs dependencies from the lockfile.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+npm ci --no-audit --no-fund
