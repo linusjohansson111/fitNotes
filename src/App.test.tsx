@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { IDBFactory } from 'fake-indexeddb';
+import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BENCH } from './ui/testing';
 
@@ -129,12 +130,28 @@ describe('AC4: repeating a lift', () => {
 
 describe('boot', () => {
   it('starts backup', async () => {
-    const root = document.createElement('div');
-    root.id = 'root';
-    document.body.append(root);
+    // main.tsx mounts its own root, which cleanup() never unmounts. Left mounted, React can
+    // flush its effects after jsdom is torn down and fail the run with "window is not defined".
+    const roots: Root[] = [];
+    vi.doMock('react-dom/client', async (importOriginal) => {
+      const client = await importOriginal<typeof import('react-dom/client')>();
+      const createRoot: typeof client.createRoot = (...args) => {
+        const root = client.createRoot(...args);
+        roots.push(root);
+        return root;
+      };
+      return { ...client, createRoot };
+    });
+    const container = document.createElement('div');
+    container.id = 'root';
+    document.body.append(container);
     const { startBackup } = await import('./backup');
     await import('./main');
     expect(startBackup).toHaveBeenCalled();
-    root.remove();
+    await screen.findByText('Nothing logged yet.');
+    expect(roots).toHaveLength(1);
+    act(() => roots.forEach((root) => root.unmount()));
+    container.remove();
+    vi.doUnmock('react-dom/client');
   });
 });

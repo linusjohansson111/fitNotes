@@ -12,7 +12,6 @@
 - `src/data/exercises.json` is generated. Edit `src/data/catalogue.json` or `src/data/gaps.json`, then run `node scripts/build-exercises.mjs`, which downloads the pinned source unless given a local copy.
 - Never use, open or consult Strength Level data, including the old tables in git history. Its policy forbids deriving ratios from it.
 - Existing exercise ids must not change, and `Snapshot` stays version 1 with `customExercises`. Live backups depend on both.
-- vitest sometimes exits 1 with `window is not defined` from react-dom while every test passes. It is a teardown race in `src/App.test.tsx`, so run it again.
 
 ## Release
 
